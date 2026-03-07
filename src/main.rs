@@ -1,16 +1,14 @@
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use lock_free::{HashMap};
 
-use samod::storage::TokioFilesystemStorage;
-use samod::{
-    ConcurrencyConfig, ConnDirection, DocHandle, DocumentId, Repo
-};
 use axum::extract::Path;
 use axum::{routing::get, Router};
+use samod::storage::TokioFilesystemStorage;
+use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, Repo, Transport, Url};
 use tokio::net::TcpListener;
-use tokio::runtime::Handle;
+use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
@@ -28,7 +26,9 @@ async fn main() {
     let storage = TokioFilesystemStorage::new(data_dir);
 
     let repo_handle = Repo::build_tokio()
-        .with_concurrency(ConcurrencyConfig::Threadpool(rayon::ThreadPoolBuilder::new().build().unwrap()))
+        .with_concurrency(ConcurrencyConfig::Threadpool(
+            rayon::ThreadPoolBuilder::new().build().unwrap(),
+        ))
         .with_storage(storage)
         // .with_announce_policy(move |_, _| {
         //     false
@@ -36,72 +36,91 @@ async fn main() {
         .load()
         .await;
 
-    let handle = Handle::current();
-    let ip_bans: Arc<HashMap<IpAddr, std::time::Instant>> = Arc::new(HashMap::new());
-    let ip_failed_attempts: Arc<HashMap<IpAddr, i64>> = Arc::new(HashMap::new());
+    let ip_bans: Arc<Mutex<HashMap<IpAddr, std::time::Instant>>> = Default::default();
+    let ip_failed_attempts: Arc<Mutex<HashMap<IpAddr, i64>>> = Default::default();
     // Start the automerge sync server
-    let repo_clone = repo_handle.clone();
-    handle.spawn(async move {
-        let port = std::env::var("PORT").unwrap_or_else(|_| "8085".to_string());
-        let addr = format!("0.0.0.0:{}", port);
+    let port: String = std::env::var("PORT").unwrap_or_else(|_| "8085".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    let acceptor = repo_handle
+        .make_acceptor(Url::parse(format!("tcp://{addr}").as_str()).unwrap())
+        .unwrap();
+
+    tokio::spawn(async move {
         let listener = TcpListener::bind(&addr).await.unwrap();
 
         println!("started automerge sync server on localhost:{}", port);
-        // TODO (Samod): Figure out what repo id is
-        // println!("repo id: {:?}", repo_clone);
 
         loop {
             match listener.accept().await {
                 Ok((socket, addr)) => {
                     let ip = addr.ip();
-                    let banned_at = ip_bans.get(&ip);
-                    if banned_at.is_some() {
-                        let time_since = std::time::Instant::now() - banned_at.unwrap();
-                        if time_since < BAN_DURATION {
-                            println!("Client connection rejected, banned for {} more minutes. IP: {ip}", (BAN_DURATION - time_since).as_secs() / 60);
-                            continue;
-                        } else {
-                            ip_bans.remove(&ip);
+                    {
+                        let mut ip_bans = ip_bans.lock().await;
+                        let banned_at = ip_bans.get(&ip);
+                        if banned_at.is_some() {
+                            let time_since = std::time::Instant::now() - *banned_at.unwrap();
+                            if time_since < BAN_DURATION {
+                                println!("Client connection rejected, banned for {} more minutes. IP: {ip}", (BAN_DURATION - time_since).as_secs() / 60);
+                                continue;
+                            } else {
+                                ip_bans.remove(&ip);
+                            }
                         }
                     }
                     println!("Client connected. IP: {ip}");
+                    let acceptor = acceptor.clone();
+                    let ip_bans = ip_bans.clone();
+                    let ip_failed_attempts = ip_failed_attempts.clone();
                     // Handle as automerge connection
-                    tokio::spawn({
-                        let repo_clone = repo_clone.clone();
-                        let ip_bans = ip_bans.clone();
-                        let ip_failed_attempts = ip_failed_attempts.clone();
-                        async move {
-                            let handle_error = || {
-                                let failed_attempts: i64 = ip_failed_attempts.get(&ip).unwrap_or(0);
-                                if failed_attempts >= MAX_FAILED_ATTEMPTS {
-                                    println!("Client has been banned for {} minutes. IP: {ip}", BAN_DURATION.as_secs() / 60);
-                                    ip_failed_attempts.insert(ip, 0);
-                                    ip_bans.insert(ip, std::time::Instant::now());
-                                } else {
-                                    ip_failed_attempts.insert(ip, failed_attempts + 1);
-                                }
-                            };
+                    tokio::spawn(async move {
+                        let handle_error = || async {
+                            let mut ip_bans = ip_bans.lock().await;
+                            let mut ip_failed_attempts = ip_failed_attempts.lock().await;
+                            let failed_attempts = ip_failed_attempts.get(&ip).cloned().unwrap_or(0);
+                            if failed_attempts >= MAX_FAILED_ATTEMPTS {
+                                println!(
+                                    "Client has been banned for {} minutes. IP: {ip}",
+                                    BAN_DURATION.as_secs() / 60
+                                );
+                                ip_failed_attempts.insert(ip, 0);
+                                ip_bans.insert(ip, std::time::Instant::now());
+                            } else {
+                                ip_failed_attempts.insert(ip, failed_attempts + 1);
+                            }
+                        };
 
-                            let connection = repo_clone
-                                .connect_tokio_io(socket, ConnDirection::Incoming).unwrap();
+                        let Ok(connection) = acceptor.accept(Transport::from_tokio_io(socket))
+                        else {
+                            println!("Error: Acceptor couldn't accept!");
+                            return;
+                        };
 
-                            match tokio::time::timeout(CONNECTION_TIMEOUT, connection.handshake_complete()).await
-                            {                                
-                                Ok(Ok(_)) => {
-                                    println!("Client connection completed successfully. IP: {ip}");
-                                    // reset failed attempts
-                                    ip_failed_attempts.insert(ip, 0);
-                                    // remove from banned list
-                                    ip_bans.remove(&ip);
-                                },
-                                Ok(Err(e)) =>{
-                                    println!("Client connection error: {:?}. IP: {ip}", e);
-                                    handle_error();
-                                }
-                                Err(_) => {
-                                    println!("Client connection timed out. IP: {ip}");
-                                    handle_error();
-                                }
+                        // put time-outers in time-out
+                        match tokio::time::timeout(
+                            CONNECTION_TIMEOUT,
+                            connection.handshake_complete(),
+                        )
+                        .await
+                        {
+                            // If there was a real error, ban 'em
+                            Ok(Err(ConnFinishedReason::ErrorReceiving(message))) => {
+                                println!("Client connection error: {message}. IP: {ip}");
+                                handle_error().await;
+                            }
+                            // If we're connected successfully, or if there was a graceful error reason, don't ban 'em
+                            Ok(_) => {
+                                println!("Client connection completed successfully. IP: {ip}");
+                                let mut ip_bans = ip_bans.lock().await;
+                                let mut ip_failed_attempts = ip_failed_attempts.lock().await;
+                                // reset failed attempts
+                                ip_failed_attempts.insert(ip, 0);
+                                // remove from banned list
+                                ip_bans.remove(&ip);
+                            }
+                            // If we timed out, ban 'em
+                            Err(_) => {
+                                println!("Client connection timed out. IP: {ip}");
+                                handle_error().await;
                             }
                         }
                     });
@@ -162,8 +181,8 @@ async fn main() {
 }
 
 fn doc_to_string_full(doc_handle: &DocHandle) -> String {
-    let checked_out_doc_json =
-        doc_handle.with_document(|d| serde_json::to_string(&automerge::AutoSerde::from(&*d)).unwrap());
+    let checked_out_doc_json = doc_handle
+        .with_document(|d| serde_json::to_string(&automerge::AutoSerde::from(&*d)).unwrap());
 
     checked_out_doc_json.to_string()
 }
