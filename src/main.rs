@@ -10,6 +10,7 @@ use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, Repo, 
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
+use automerge::{ChangeHash};
 
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
 const MAX_FAILED_ATTEMPTS: i64 = 50;
@@ -131,6 +132,7 @@ async fn main() {
     });
 
     let repo_handle_clone = repo_handle.clone();
+    let repo_handle_clone2 = repo_handle.clone();
 
     // Start the HTTP server
     let app = Router::new()
@@ -155,6 +157,41 @@ async fn main() {
                                 let errstr = "Error retrieving document: Repo stopped!".to_string();
                                 println!("{}", errstr);
                                 errstr
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error parsing document ID: {:?}", e);
+                        format!("Error parsing document ID: {:?}", e)
+                    }
+                }
+            }),
+        )
+        .route(
+            "/last_heads/{id}",
+            get(|Path(id): Path<String>| async move {
+                println!("Received request for last heads of document ID: {}", id);
+                match DocumentId::from_str(&id) {
+                    Ok(document_id) => {
+                        println!("Successfully parsed document ID");
+                        match repo_handle_clone2.find(document_id).await {
+                            Ok(Some(doc_handle)) => {
+                                println!("Successfully retrieved document");
+                                let mut heads: Vec<ChangeHash> = Vec::new();
+                                doc_handle.with_document(|d| {
+                                    heads = d.get_heads();
+                                });
+                                serde_json::to_string(&heads).unwrap().to_string()
+                            }
+                            Ok(None) => {
+                                let errstr = "Error retrieving document: Not found!".to_string();
+                                println!("{}", errstr);
+                                format!("<error>{}</error>", errstr).to_string()
+                            }
+                            Err(_) => {
+                                let errstr = "Error retrieving document: Repo stopped!".to_string();
+                                println!("{}", errstr);
+                                format!("<error>{}</error>", errstr).to_string()
                             }
                         }
                     }
