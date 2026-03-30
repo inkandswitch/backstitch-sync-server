@@ -214,11 +214,13 @@ async fn main() {
                         match repo_handle_clone3.find(document_id).await {
                             Ok(Some(doc_handle)) => {
                                 println!("Successfully retrieved document");
-                                match ChangeHash::from_str(&change_hash) {
-                                    Ok(change_hash) => doc_to_string_at(&doc_handle, &change_hash),
+                                match parse_change_hashes(&change_hash) {
+                                    Ok(change_hashes) => doc_to_string_at(&doc_handle, &change_hashes),
                                     Err(e) => {
-                                        let errstr =
-                                            format!("Error parsing change hash '{}': {:?}", change_hash, e);
+                                        let errstr = format!(
+                                            "Error parsing change hash list '{}': {}",
+                                            change_hash, e
+                                        );
                                         println!("{}", errstr);
                                         errstr
                                     }
@@ -265,19 +267,38 @@ fn doc_to_string_full(doc_handle: &DocHandle) -> String {
     checked_out_doc_json.to_string()
 }
 
-fn doc_to_string_at(doc_handle: &DocHandle, change_hash: &ChangeHash) -> String {
+fn doc_to_string_at(doc_handle: &DocHandle, change_hashes: &[ChangeHash]) -> String {
     let checked_out_doc_json = doc_handle.with_document(|d| {
-        let heads = [change_hash.clone()];
-        match ReadDoc::hydrate(&*d, ROOT, Some(&heads)) {
+        match ReadDoc::hydrate(&*d, ROOT, Some(change_hashes)) {
             Ok(hydrated) => serde_json::to_string(&hydrate_value_to_json(&hydrated)).unwrap(),
             Err(e) => format!(
-                "Error getting document at change hash '{}': {:?}",
-                change_hash, e
+                "Error getting document at change hashes '{:?}': {:?}",
+                change_hashes, e
             ),
         }
     });
 
     checked_out_doc_json.to_string()
+}
+
+fn parse_change_hashes(input: &str) -> Result<Vec<ChangeHash>, String> {
+    let mut hashes = Vec::new();
+
+    for token in input.split(',') {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let hash = ChangeHash::from_str(trimmed)
+            .map_err(|e| format!("invalid hash '{}': {:?}", trimmed, e))?;
+        hashes.push(hash);
+    }
+
+    if hashes.is_empty() {
+        return Err("no change hashes provided".to_string());
+    }
+
+    Ok(hashes)
 }
 
 fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value {
