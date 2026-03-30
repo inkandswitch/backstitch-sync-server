@@ -10,7 +10,7 @@ use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, Repo, 
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
-use automerge::{ChangeHash};
+use automerge::{ChangeHash, ROOT, ReadDoc};
 
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
 const MAX_FAILED_ATTEMPTS: i64 = 50;
@@ -133,6 +133,7 @@ async fn main() {
 
     let repo_handle_clone = repo_handle.clone();
     let repo_handle_clone2 = repo_handle.clone();
+    let repo_handle_clone3 = repo_handle.clone();
 
     // Start the HTTP server
     let app = Router::new()
@@ -202,6 +203,46 @@ async fn main() {
                 }
             }),
         )
+        // route to get the doc at a certain change hash
+        .route(
+            "/doc_at/{id}/{change_hash}",
+            get(|Path((id, change_hash)): Path<(String, String)>| async move {
+                println!("Received request for document ID: {} at change hash: {}", id, change_hash);
+                match DocumentId::from_str(&id) {
+                    Ok(document_id) => {
+                        println!("Successfully parsed document ID");
+                        match repo_handle_clone3.find(document_id).await {
+                            Ok(Some(doc_handle)) => {
+                                println!("Successfully retrieved document");
+                                match ChangeHash::from_str(&change_hash) {
+                                    Ok(change_hash) => doc_to_string_at(&doc_handle, &change_hash),
+                                    Err(e) => {
+                                        let errstr =
+                                            format!("Error parsing change hash '{}': {:?}", change_hash, e);
+                                        println!("{}", errstr);
+                                        errstr
+                                    }
+                                }
+                            }
+                            Ok(None) => {
+                                let errstr = "Error retrieving document: Not found!".to_string();
+                                println!("{}", errstr);
+                                errstr
+                            }
+                            Err(_) => {
+                                let errstr = "Error retrieving document: Repo stopped!".to_string();
+                                println!("{}", errstr);
+                                errstr
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error parsing document ID: {:?}", e);
+                        format!("Error parsing document ID: {:?}", e)
+                    }
+                }
+            }),
+        )
         .route("/", get(|| async { "fetch documents with /doc/{id}" }))
         .layer(CorsLayer::permissive());
 
@@ -222,6 +263,42 @@ fn doc_to_string_full(doc_handle: &DocHandle) -> String {
         .with_document(|d| serde_json::to_string(&automerge::AutoSerde::from(&*d)).unwrap());
 
     checked_out_doc_json.to_string()
+}
+
+fn doc_to_string_at(doc_handle: &DocHandle, change_hash: &ChangeHash) -> String {
+    let checked_out_doc_json = doc_handle.with_document(|d| {
+        let heads = [change_hash.clone()];
+        match ReadDoc::hydrate(&*d, ROOT, Some(&heads)) {
+            Ok(hydrated) => serde_json::to_string(&hydrate_value_to_json(&hydrated)).unwrap(),
+            Err(e) => format!(
+                "Error getting document at change hash '{}': {:?}",
+                change_hash, e
+            ),
+        }
+    });
+
+    checked_out_doc_json.to_string()
+}
+
+fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value {
+    match value {
+        automerge::hydrate::Value::Scalar(scalar) => {
+            serde_json::to_value(scalar).unwrap_or(serde_json::Value::Null)
+        }
+        automerge::hydrate::Value::Map(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, map_value) in map.iter() {
+                out.insert(key.clone(), hydrate_value_to_json(&map_value.value));
+            }
+            serde_json::Value::Object(out)
+        }
+        automerge::hydrate::Value::List(list) => serde_json::Value::Array(
+            list.iter()
+                .map(|list_value| hydrate_value_to_json(&list_value.value))
+                .collect(),
+        ),
+        automerge::hydrate::Value::Text(text) => serde_json::Value::String(text.to_string()),
+    }
 }
 
 #[allow(dead_code)]
