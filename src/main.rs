@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use axum::extract::Path;
 use axum::{routing::get, Router};
+use chrono::{TimeZone, Utc};
+use serde_json::json;
 use samod::storage::TokioFilesystemStorage;
 use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, Repo, Transport, Url};
 use tokio::net::TcpListener;
@@ -134,6 +136,7 @@ async fn main() {
     let repo_handle_clone = repo_handle.clone();
     let repo_handle_clone2 = repo_handle.clone();
     let repo_handle_clone3 = repo_handle.clone();
+    let repo_handle_clone4 = repo_handle.clone();
 
     // Start the HTTP server
     let app = Router::new()
@@ -245,6 +248,37 @@ async fn main() {
                 }
             }),
         )
+        .route(
+            "/list_changes/{id}",
+            get(|Path(id): Path<String>| async move {
+                println!("Received request for changes list of document ID: {}", id);
+                match DocumentId::from_str(&id) {
+                    Ok(document_id) => {
+                        println!("Successfully parsed document ID");
+                        match repo_handle_clone4.find(document_id).await {
+                            Ok(Some(doc_handle)) => {
+                                println!("Successfully retrieved document");
+                                list_changes(&doc_handle)
+                            }
+                            Ok(None) => {
+                                let errstr = "Error retrieving document: Not found!".to_string();
+                                println!("{}", errstr);
+                                errstr
+                            }
+                            Err(_) => {
+                                let errstr = "Error retrieving document: Repo stopped!".to_string();
+                                println!("{}", errstr);
+                                errstr
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error parsing document ID: {:?}", e);
+                        format!("Error parsing document ID: {:?}", e)
+                    }
+                }
+            }),
+        )
         .route("/", get(|| async { "fetch documents with /doc/{id}" }))
         .layer(CorsLayer::permissive());
 
@@ -320,6 +354,38 @@ fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value
         ),
         automerge::hydrate::Value::Text(text) => serde_json::Value::String(text.to_string()),
     }
+}
+
+fn list_changes(doc_handle: &DocHandle) -> String {
+    let changes_json = doc_handle.with_document(|d| {
+        let changes = d.get_changes(&[]);
+        let mut out = serde_json::Map::new();
+
+        for change in changes {
+            let hash = change.hash().to_string();
+            let date = match Utc.timestamp_opt(change.timestamp(), 0).single() {
+                Some(dt) => dt.to_rfc3339(),
+                None => change.timestamp().to_string(),
+            };
+            let message = match change.message() {
+                Some(raw_message) => serde_json::from_str::<serde_json::Value>(raw_message)
+                    .unwrap_or_else(|_| serde_json::Value::String(raw_message.clone())),
+                None => serde_json::Value::Null,
+            };
+            out.insert(
+                hash,
+                json!({
+                    "author": change.actor_id().to_string(),
+                    "date": date,
+                    "message": message
+                }),
+            );
+        }
+
+        serde_json::Value::Object(out)
+    });
+
+    serde_json::to_string(&changes_json).unwrap()
 }
 
 #[allow(dead_code)]
