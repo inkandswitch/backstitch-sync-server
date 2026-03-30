@@ -17,6 +17,7 @@ axum = "0.8"
 tower-http = { version = "0.6.2", features = ["cors"] }
 lock-free = "0.1.2"
 rayon = "1.11.0"
+chrono = "0.4.44"
 
 # create profile release_debug
 [profile.release_debug]
