@@ -1,6 +1,6 @@
 # Backstitch Sync Server
 
-This is an Automerge-based TCP sync server, intended for use with the Godot version control plugin [Backstitch](https://github.com/inkandswitch/patchwork-godot-plugin/issues).
+This is an Automerge-based TCP sync server, intended for use with the Godot version control plugin [Backstitch](https://github.com/inkandswitch/patchwork-godot-plugin/).
 
 ## Installation
 
