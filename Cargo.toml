@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-automerge = "0.7.4"
-samod = { git="https://github.com/LilithSilver/samod.git", branch="connection_handles", features = ["tokio", "threadpool"] }
+automerge = "0.8.0"
+samod = { version="0.9.0", features = ["tokio", "threadpool"] }
 futures = "0.3.32"
-tokio = { version = "1.50.0", features = ["full"] }
+tokio = { version = "1.51.0", features = ["full"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.2"

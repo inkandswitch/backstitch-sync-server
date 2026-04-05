@@ -1,0 +1,14 @@
+[Unit]
+Description=Backstitch Sync Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/backstitch-sync-server
+ExecStart=just run /root/automerge-server-data/prod
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
