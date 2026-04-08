@@ -15,7 +15,7 @@ cargo install just
 To build and run the server with defaults, use `just run`:
 
 ```
-run [data_dir] [port] [http_port] [debug|release]
+just run [data_dir] [port] [http_port] [debug|release]
 ```
 
 Data will be stored to `./data` by default, but can be overridden.
