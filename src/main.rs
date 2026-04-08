@@ -8,7 +8,7 @@ use axum::{routing::get, Router};
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 use samod::storage::TokioFilesystemStorage;
-use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, Repo, Transport, Url};
+use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, NeverAnnounce, Repo, Transport, Url};
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
@@ -33,9 +33,7 @@ async fn main() {
             rayon::ThreadPoolBuilder::new().build().unwrap(),
         ))
         .with_storage(storage)
-        // .with_announce_policy(move |_, _| {
-        //     false
-        // })
+        .with_announce_policy(NeverAnnounce)
         .load()
         .await;
 
