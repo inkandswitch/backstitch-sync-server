@@ -2,6 +2,8 @@
 
 This is an Automerge-based TCP sync server, intended for use with the Godot version control plugin [Backstitch](https://backstitch.dev/).
 
+Join our [Discord](https://discord.gg/SkW9vem5Ez)!
+
 ## Installation
 
 Clone this repository locally. To build and run, first, install [Rust and Cargo](https://rust-lang.org/tools/install/). Then, to install `just`, run:
