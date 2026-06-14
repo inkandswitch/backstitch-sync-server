@@ -10,7 +10,7 @@ use serde_json::json;
 use samod::storage::TokioFilesystemStorage;
 use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, NeverAnnounce, Repo, Transport, Url};
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tower_http::cors::CorsLayer;
 use automerge::{ChangeHash, ROOT, ReadDoc};
 
@@ -45,6 +45,8 @@ async fn main() {
     let acceptor = repo_handle
         .make_acceptor(Url::parse(format!("tcp://{addr}").as_str()).unwrap())
         .unwrap();
+
+    let web_semaphore = Arc::new(Semaphore::new(100));
 
     tokio::spawn(async move {
         let listener = TcpListener::bind(&addr).await.unwrap();
@@ -136,6 +138,11 @@ async fn main() {
     let repo_handle_clone3 = repo_handle.clone();
     let repo_handle_clone4 = repo_handle.clone();
 
+    let sema_clone = web_semaphore.clone();
+    let sema_clone2 = web_semaphore.clone();
+    let sema_clone3 = web_semaphore.clone();
+    let sema_clone4 = web_semaphore.clone();
+
     // Start the HTTP server
     let app = Router::new()
         .route(
@@ -145,6 +152,7 @@ async fn main() {
                 match DocumentId::from_str(&id) {
                     Ok(document_id) => {
                         println!("Successfully parsed document ID");
+                        let _permit = sema_clone.acquire().await.unwrap();
                         match repo_handle_clone.find(document_id).await {
                             Ok(Some(doc_handle)) => {
                                 println!("Successfully retrieved document");
@@ -176,6 +184,7 @@ async fn main() {
                 match DocumentId::from_str(&id) {
                     Ok(document_id) => {
                         println!("Successfully parsed document ID");
+                        let _permit = sema_clone2.acquire().await.unwrap();
                         match repo_handle_clone2.find(document_id).await {
                             Ok(Some(doc_handle)) => {
                                 println!("Successfully retrieved document");
@@ -212,6 +221,7 @@ async fn main() {
                 match DocumentId::from_str(&id) {
                     Ok(document_id) => {
                         println!("Successfully parsed document ID");
+                        let _permit = sema_clone3.acquire().await.unwrap();
                         match repo_handle_clone3.find(document_id).await {
                             Ok(Some(doc_handle)) => {
                                 println!("Successfully retrieved document");
@@ -253,6 +263,7 @@ async fn main() {
                 match DocumentId::from_str(&id) {
                     Ok(document_id) => {
                         println!("Successfully parsed document ID");
+                        let _permit = sema_clone4.acquire().await.unwrap();
                         match repo_handle_clone4.find(document_id).await {
                             Ok(Some(doc_handle)) => {
                                 println!("Successfully retrieved document");
