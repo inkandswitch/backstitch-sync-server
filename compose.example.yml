@@ -1,0 +1,17 @@
+services:
+  backstitch-sync-server:
+    build: .
+    image: backstitch-sync-server:local
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      PORT: "8085"
+      HTTP_PORT: "3000"
+    ports:
+      - "8085:8085"
+      - "3000:3000"
+    volumes:
+      - backstitch-data:/data
+
+volumes:
+  backstitch-data:

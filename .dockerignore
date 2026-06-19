@@ -1,0 +1,13 @@
+target/
+debug/
+data/
+.data/
+
+.git/
+.github/
+
+Dockerfile
+compose.example.yml
+
+*.pdb
+**/*.rs.bk
