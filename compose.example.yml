@@ -1,7 +1,6 @@
 services:
   backstitch-sync-server:
-    build: .
-    image: backstitch-sync-server:local
+    image: ghcr.io/inkandswitch/backstitch-sync-server:latest
     restart: unless-stopped
     environment:
       DATA_DIR: /data
