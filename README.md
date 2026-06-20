@@ -26,13 +26,13 @@ The server will run a TCP `samod` connection at `localhost:8085`, as well as an 
 
 ## Docker
 
-An example Docker Compose configuration is available in `compose.example.yml`. It builds the image locally from this repository:
+An example Docker Compose configuration is available in `compose.example.yml`. It runs the image from the ghcr.io `backstitch-sync-server` package.
 
 ```
 docker compose -f compose.example.yml up
 ```
 
-To run the published image:
+Or, to run the published image without Docker Compose:
 
 ```
 docker run --rm \
