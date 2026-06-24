@@ -30,6 +30,10 @@ The container uses these defaults:
 | `PORT` | `8085` | TCP `samod` sync server port. |
 | `HTTP_PORT` | `3000` | HTTP server port for testing and document inspection. |
 
+## VPN Tunnel
+
+This server doesn't provide any authentication, by default. Instead of exposing it to the open internet, we **highly recommend** using a VPN tunneling service like Tailscale or ZeroTier. 
+
 ## Building & Manual Installation
 
 Clone this repository locally. To build and run, first, install [Rust and Cargo](https://rust-lang.org/tools/install/). Then, to install `just`, run:
