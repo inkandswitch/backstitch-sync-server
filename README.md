@@ -34,7 +34,7 @@ The container uses these defaults:
 
 By default, the server runs at localhost:PORT, and anyone on your local network will be able to access it. If you want to expose it to other team members, we **highly recommend** using a VPN tunneling service like Tailscale or ZeroTier.
 
-lternatively, you can directly port-forward with your server provider or home router. But since Backstitch Sync Server doesn't (yet) provide authentication, anyone who guesses your project ID will be able to access or edit your data.
+Alternatively, you can directly port-forward with your server provider or home router. But since Backstitch Sync Server doesn't (yet) provide authentication, anyone who guesses your project ID will be able to access or edit your data.
 
 
 ## Building & Manual Installation
