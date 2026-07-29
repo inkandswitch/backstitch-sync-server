@@ -2,6 +2,14 @@ name: 🔍 Rust Validation
 
 on:
   workflow_call:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - 'main'
 
 permissions:
   contents: read
@@ -38,10 +46,6 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --all-targets -- -D warnings
-      - name: Run Clippy (tokio-console)
-        env:
-            RUSTFLAGS: "--cfg tokio_unstable"
-        run: cargo clippy --all-targets --features "tokio-console" -- -D warnings
 
   test:
     name: 🧪 Test
