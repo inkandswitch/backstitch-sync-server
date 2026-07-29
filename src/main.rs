@@ -1,294 +1,39 @@
-use std::collections::HashMap;
-use std::net::IpAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 
-use axum::extract::Path;
 use axum::{routing::get, Router};
-use chrono::{TimeZone, Utc};
-use serde_json::json;
-use samod::storage::TokioFilesystemStorage;
-use samod::{ConcurrencyConfig, ConnFinishedReason, DocHandle, DocumentId, NeverAnnounce, Repo, Transport, Url};
-use tokio::net::TcpListener;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tower_http::cors::CorsLayer;
-use automerge::{ChangeHash, ROOT, ReadDoc};
 
-const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
-const MAX_FAILED_ATTEMPTS: i64 = 50;
-const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+use crate::web::WebEndpointState;
 
+mod bans;
+mod sync;
 mod tracing;
+mod web;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tracing::initialize_tracing();
 
-    // get home directory
-    let data_dir = std::env::var("DATA_DIR").unwrap();
-    let storage = TokioFilesystemStorage::new(data_dir);
-
-    let repo_handle = Repo::build_tokio()
-        .with_concurrency(ConcurrencyConfig::Threadpool(
-            rayon::ThreadPoolBuilder::new().build().unwrap(),
-        ))
-        .with_storage(storage)
-        .with_announce_policy(NeverAnnounce)
-        .load()
-        .await;
-
-    let ip_bans: Arc<Mutex<HashMap<IpAddr, std::time::Instant>>> = Default::default();
-    let ip_failed_attempts: Arc<Mutex<HashMap<IpAddr, i64>>> = Default::default();
-    // Start the automerge sync server
-    let port: String = std::env::var("PORT").unwrap_or_else(|_| "8085".to_string());
-    let addr = format!("0.0.0.0:{}", port);
-    let acceptor = repo_handle
-        .make_acceptor(Url::parse(format!("tcp://{addr}").as_str()).unwrap())
-        .unwrap();
-
     let web_semaphore = Arc::new(Semaphore::new(100));
 
-    tokio::spawn(async move {
-        let listener = TcpListener::bind(&addr).await.unwrap();
+    // ends on drop
+    let sync_server = sync::SyncServer::new().await;
 
-        println!("started automerge sync server on localhost:{}", port);
-
-        loop {
-            match listener.accept().await {
-                Ok((socket, addr)) => {
-                    let ip = addr.ip();
-                    {
-                        let mut ip_bans = ip_bans.lock().await;
-                        let banned_at = ip_bans.get(&ip);
-                        if banned_at.is_some() {
-                            let time_since = std::time::Instant::now() - *banned_at.unwrap();
-                            if time_since < BAN_DURATION {
-                                println!("Client connection rejected, banned for {} more minutes. IP: {ip}", (BAN_DURATION - time_since).as_secs() / 60);
-                                continue;
-                            } else {
-                                ip_bans.remove(&ip);
-                            }
-                        }
-                    }
-                    println!("Client connected. IP: {ip}");
-                    let acceptor = acceptor.clone();
-                    let ip_bans = ip_bans.clone();
-                    let ip_failed_attempts = ip_failed_attempts.clone();
-                    // Handle as automerge connection
-                    tokio::spawn(async move {
-                        let handle_error = || async {
-                            let mut ip_bans = ip_bans.lock().await;
-                            let mut ip_failed_attempts = ip_failed_attempts.lock().await;
-                            let failed_attempts = ip_failed_attempts.get(&ip).cloned().unwrap_or(0);
-                            if failed_attempts >= MAX_FAILED_ATTEMPTS {
-                                println!(
-                                    "Client has been banned for {} minutes. IP: {ip}",
-                                    BAN_DURATION.as_secs() / 60
-                                );
-                                ip_failed_attempts.insert(ip, 0);
-                                ip_bans.insert(ip, std::time::Instant::now());
-                            } else {
-                                ip_failed_attempts.insert(ip, failed_attempts + 1);
-                            }
-                        };
-
-                        let Ok(connection) = acceptor.accept(Transport::from_tokio_io(socket))
-                        else {
-                            println!("Error: Acceptor couldn't accept!");
-                            return;
-                        };
-
-                        // put time-outers in time-out
-                        match tokio::time::timeout(
-                            CONNECTION_TIMEOUT,
-                            connection.handshake_complete(),
-                        )
-                        .await
-                        {
-                            // If there was a real error, ban 'em
-                            Ok(Err(ConnFinishedReason::ErrorReceiving(message))) => {
-                                println!("Client connection error: {message}. IP: {ip}");
-                                handle_error().await;
-                            }
-                            // If we're connected successfully, or if there was a graceful error reason, don't ban 'em
-                            Ok(_) => {
-                                println!("Client connection completed successfully. IP: {ip}");
-                                let mut ip_bans = ip_bans.lock().await;
-                                let mut ip_failed_attempts = ip_failed_attempts.lock().await;
-                                // reset failed attempts
-                                ip_failed_attempts.insert(ip, 0);
-                                // remove from banned list
-                                ip_bans.remove(&ip);
-                            }
-                            // If we timed out, ban 'em
-                            Err(_) => {
-                                println!("Client connection timed out. IP: {ip}");
-                                handle_error().await;
-                            }
-                        }
-                    });
-                }
-                Err(e) => println!("couldn't get client: {:?}", e),
-            }
-        }
-    });
-
-    let repo_handle_clone = repo_handle.clone();
-    let repo_handle_clone2 = repo_handle.clone();
-    let repo_handle_clone3 = repo_handle.clone();
-    let repo_handle_clone4 = repo_handle.clone();
-
-    let sema_clone = web_semaphore.clone();
-    let sema_clone2 = web_semaphore.clone();
-    let sema_clone3 = web_semaphore.clone();
-    let sema_clone4 = web_semaphore.clone();
+    let state = WebEndpointState {
+        repo: sync_server.repo(),
+        semaphore: web_semaphore.clone(),
+    };
 
     // Start the HTTP server
     let app = Router::new()
-        .route(
-            "/doc/{id}",
-            get(|Path(id): Path<String>| async move {
-                println!("Received request for document ID: {}", id);
-                match DocumentId::from_str(&id) {
-                    Ok(document_id) => {
-                        println!("Successfully parsed document ID");
-                        let _permit = sema_clone.acquire().await.unwrap();
-                        match repo_handle_clone.find(document_id).await {
-                            Ok(Some(doc_handle)) => {
-                                println!("Successfully retrieved document");
-                                doc_to_string_full(&doc_handle)
-                            }
-                            Ok(None) => {
-                                let errstr = "Error retrieving document: Not found!".to_string();
-                                println!("{}", errstr);
-                                errstr
-                            }
-                            Err(_) => {
-                                let errstr = "Error retrieving document: Repo stopped!".to_string();
-                                println!("{}", errstr);
-                                errstr
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        println!("Error parsing document ID: {:?}", e);
-                        format!("Error parsing document ID: {:?}", e)
-                    }
-                }
-            }),
-        )
-        .route(
-            "/last_heads/{id}",
-            get(|Path(id): Path<String>| async move {
-                println!("Received request for last heads of document ID: {}", id);
-                match DocumentId::from_str(&id) {
-                    Ok(document_id) => {
-                        println!("Successfully parsed document ID");
-                        let _permit = sema_clone2.acquire().await.unwrap();
-                        match repo_handle_clone2.find(document_id).await {
-                            Ok(Some(doc_handle)) => {
-                                println!("Successfully retrieved document");
-                                let mut heads: Vec<ChangeHash> = Vec::new();
-                                doc_handle.with_document(|d| {
-                                    heads = d.get_heads();
-                                });
-                                serde_json::to_string(&heads).unwrap().to_string()
-                            }
-                            Ok(None) => {
-                                let errstr = "Error retrieving document: Not found!".to_string();
-                                println!("{}", errstr);
-                                format!("<error>{}</error>", errstr).to_string()
-                            }
-                            Err(_) => {
-                                let errstr = "Error retrieving document: Repo stopped!".to_string();
-                                println!("{}", errstr);
-                                format!("<error>{}</error>", errstr).to_string()
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        println!("Error parsing document ID: {:?}", e);
-                        format!("Error parsing document ID: {:?}", e)
-                    }
-                }
-            }),
-        )
+        .route("/doc/{id}", get(web::doc))
+        .route("/last_heads/{id}", get(web::last_heads))
         // route to get the doc at a certain change hash
-        .route(
-            "/doc_at/{id}/{change_hash}",
-            get(|Path((id, change_hash)): Path<(String, String)>| async move {
-                println!("Received request for document ID: {} at change hash: {}", id, change_hash);
-                match DocumentId::from_str(&id) {
-                    Ok(document_id) => {
-                        println!("Successfully parsed document ID");
-                        let _permit = sema_clone3.acquire().await.unwrap();
-                        match repo_handle_clone3.find(document_id).await {
-                            Ok(Some(doc_handle)) => {
-                                println!("Successfully retrieved document");
-                                match parse_change_hashes(&change_hash) {
-                                    Ok(change_hashes) => doc_to_string_at(&doc_handle, &change_hashes),
-                                    Err(e) => {
-                                        let errstr = format!(
-                                            "Error parsing change hash list '{}': {}",
-                                            change_hash, e
-                                        );
-                                        println!("{}", errstr);
-                                        errstr
-                                    }
-                                }
-                            }
-                            Ok(None) => {
-                                let errstr = "Error retrieving document: Not found!".to_string();
-                                println!("{}", errstr);
-                                errstr
-                            }
-                            Err(_) => {
-                                let errstr = "Error retrieving document: Repo stopped!".to_string();
-                                println!("{}", errstr);
-                                errstr
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        println!("Error parsing document ID: {:?}", e);
-                        format!("Error parsing document ID: {:?}", e)
-                    }
-                }
-            }),
-        )
-        .route(
-            "/list_changes/{id}",
-            get(|Path(id): Path<String>| async move {
-                println!("Received request for changes list of document ID: {}", id);
-                match DocumentId::from_str(&id) {
-                    Ok(document_id) => {
-                        println!("Successfully parsed document ID");
-                        let _permit = sema_clone4.acquire().await.unwrap();
-                        match repo_handle_clone4.find(document_id).await {
-                            Ok(Some(doc_handle)) => {
-                                println!("Successfully retrieved document");
-                                list_changes(&doc_handle)
-                            }
-                            Ok(None) => {
-                                let errstr = "Error retrieving document: Not found!".to_string();
-                                println!("{}", errstr);
-                                errstr
-                            }
-                            Err(_) => {
-                                let errstr = "Error retrieving document: Repo stopped!".to_string();
-                                println!("{}", errstr);
-                                errstr
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        println!("Error parsing document ID: {:?}", e);
-                        format!("Error parsing document ID: {:?}", e)
-                    }
-                }
-            }),
-        )
+        .route("/doc_at/{id}/{change_hash}", get(web::doc_at))
+        .route("/list_changes/{id}", get(web::list_changes))
         .route("/", get(|| async { "fetch documents with /doc/{id}" }))
+        .with_state(state)
         .layer(CorsLayer::permissive());
 
     let http_port = std::env::var("HTTP_PORT").unwrap_or_else(|_| "80".to_string());
@@ -296,136 +41,13 @@ async fn main() {
     println!("starting HTTP server on {}", http_addr);
 
     let listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.unwrap();
+        })
+        .await
+        .unwrap();
 
     tokio::signal::ctrl_c().await.unwrap();
-
-    repo_handle.stop().await;
-}
-
-fn doc_to_string_full(doc_handle: &DocHandle) -> String {
-    let checked_out_doc_json = doc_handle
-        .with_document(|d| serde_json::to_string(&automerge::AutoSerde::from(&*d)).unwrap());
-
-    checked_out_doc_json.to_string()
-}
-
-fn doc_to_string_at(doc_handle: &DocHandle, change_hashes: &[ChangeHash]) -> String {
-    let checked_out_doc_json = doc_handle.with_document(|d| {
-        match ReadDoc::hydrate(&*d, ROOT, Some(change_hashes)) {
-            Ok(hydrated) => serde_json::to_string(&hydrate_value_to_json(&hydrated)).unwrap(),
-            Err(e) => format!(
-                "Error getting document at change hashes '{:?}': {:?}",
-                change_hashes, e
-            ),
-        }
-    });
-
-    checked_out_doc_json.to_string()
-}
-
-fn parse_change_hashes(input: &str) -> Result<Vec<ChangeHash>, String> {
-    let mut hashes = Vec::new();
-
-    for token in input.split(',') {
-        let trimmed = token.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let hash = ChangeHash::from_str(trimmed)
-            .map_err(|e| format!("invalid hash '{}': {:?}", trimmed, e))?;
-        hashes.push(hash);
-    }
-
-    if hashes.is_empty() {
-        return Err("no change hashes provided".to_string());
-    }
-
-    Ok(hashes)
-}
-
-fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value {
-    match value {
-        automerge::hydrate::Value::Scalar(scalar) => {
-            serde_json::to_value(scalar).unwrap_or(serde_json::Value::Null)
-        }
-        automerge::hydrate::Value::Map(map) => {
-            let mut out = serde_json::Map::new();
-            for (key, map_value) in map.iter() {
-                out.insert(key.clone(), hydrate_value_to_json(&map_value.value));
-            }
-            serde_json::Value::Object(out)
-        }
-        automerge::hydrate::Value::List(list) => serde_json::Value::Array(
-            list.iter()
-                .map(|list_value| hydrate_value_to_json(&list_value.value))
-                .collect(),
-        ),
-        automerge::hydrate::Value::Text(text) => serde_json::Value::String(text.to_string()),
-    }
-}
-
-fn list_changes(doc_handle: &DocHandle) -> String {
-    let changes_json = doc_handle.with_document(|d| {
-        let changes = d.get_changes(&[]);
-        let mut out = serde_json::Map::new();
-
-        for change in changes {
-            let hash = change.hash().to_string();
-            let date = match Utc.timestamp_opt(change.timestamp(), 0).single() {
-                Some(dt) => dt.to_rfc3339(),
-                None => change.timestamp().to_string(),
-            };
-            let message = match change.message() {
-                Some(raw_message) => serde_json::from_str::<serde_json::Value>(raw_message)
-                    .unwrap_or_else(|_| serde_json::Value::String(raw_message.clone())),
-                None => serde_json::Value::Null,
-            };
-            out.insert(
-                hash,
-                json!({
-                    "author": change.actor_id().to_string(),
-                    "date": date,
-                    "message": message
-                }),
-            );
-        }
-
-        serde_json::Value::Object(out)
-    });
-
-    serde_json::to_string(&changes_json).unwrap()
-}
-
-#[allow(dead_code)]
-fn doc_to_string(doc_handle: &DocHandle) -> String {
-    let json_value = doc_handle.with_document(|d| {
-        let auto_serde = automerge::AutoSerde::from(&*d);
-        serde_json::to_value(&auto_serde).unwrap()
-    });
-
-    fn truncate_long_strings(value: &mut serde_json::Value) {
-        match value {
-            serde_json::Value::Object(map) => {
-                for (_, v) in map.iter_mut() {
-                    truncate_long_strings(v);
-                }
-            }
-            serde_json::Value::Array(arr) => {
-                for v in arr.iter_mut() {
-                    truncate_long_strings(v);
-                }
-            }
-            serde_json::Value::String(s) => {
-                if s.len() > 50 {
-                    *s = format!("{}...", &s[..47]);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mut json_value = json_value;
-    truncate_long_strings(&mut json_value);
-    serde_json::to_string_pretty(&json_value).unwrap()
+    drop(sync_server);
 }
