@@ -62,7 +62,7 @@ impl IntoResponse for WebError {
 pub struct Change {
     author: String,
     date: String,
-    message: Option<String>,
+    message: serde_json::Value,
 }
 
 async fn get_handle(id: &str, state: &WebEndpointState) -> Result<DocHandle, WebError> {
@@ -178,13 +178,18 @@ pub async fn list_changes(
                 Some(dt) => dt.to_rfc3339(),
                 None => change.timestamp().to_string(),
             };
+            let message = match change.message() {
+                Some(raw_message) => serde_json::from_str::<serde_json::Value>(raw_message)
+                    .unwrap_or_else(|_| serde_json::Value::String(raw_message.clone())),
+                None => serde_json::Value::Null,
+            };
 
             out.insert(
                 hash,
                 Change {
                     author: change.actor_id().to_string(),
                     date,
-                    message: change.message().cloned(),
+                    message,
                 },
             );
         }
