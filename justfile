@@ -2,12 +2,22 @@
   just --list
 
 [arg('profile', pattern='debug|release')]
-run data_dir="./data" port="8085" http_port="3000" profile="release":
+[arg('auth', pattern='none')]
+run data_dir="./data" sync_port="8085" http_port="3000" profile="release" auth="none" webviewer="" :
     #!/usr/bin/env sh
-    mkdir {{data_dir}}
-    RUST_BACKTRACE=1 \
+    mkdir -p {{data_dir}}
+
+    webviewer_arg=""
+    if [ -n "{{webviewer}}" ]; then
+        webviewer_arg="--webviewer \"{{webviewer}}\""
+    fi
+
+    RUST_BACKTRACE=full \
     RUST_LOG=automerge_repo=debug,info \
-    DATA_DIR={{data_dir}} \
-    PORT={{port}} \
-    HTTP_PORT={{http_port}} \
-    cargo run --{{profile}}
+    cargo run --{{profile}} -- \
+        --data-dir "{{data_dir}}" \
+        --public-sync-port "{{sync_port}}" \
+        --sync-port "{{sync_port}}" \
+        --http-port "{{http_port}}" \
+        --auth "{{auth}}" \
+        $webviewer_arg

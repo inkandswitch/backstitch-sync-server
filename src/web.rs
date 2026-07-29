@@ -12,11 +12,15 @@ use samod::{DocHandle, DocumentId, Repo};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
+use url::Url;
+
+use crate::config::{Authentication, CommandConfig};
 
 #[derive(Clone)]
 pub struct WebEndpointState {
     pub repo: Repo,
     pub semaphore: Arc<Semaphore>,
+    pub config: Arc<CommandConfig>,
 }
 
 #[derive(Debug, Error)]
@@ -116,12 +120,33 @@ fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value
     }
 }
 
+#[derive(Serialize)]
+pub struct ServerDescription {
+    version: String,
+    webviewer: Option<Url>,
+    sync_port: u16,
+    auth: Authentication,
+}
+
+pub async fn describe(
+    State(state): State<WebEndpointState>,
+) -> Result<Json<ServerDescription>, WebError> {
+    let _permit = state.semaphore.acquire().await.unwrap();
+    tracing::info!("Received request to describe");
+    Ok(Json(ServerDescription {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        auth: state.config.auth.clone(),
+        sync_port: state.config.sync_port.clone(),
+        webviewer: state.config.webviewer.clone(),
+    }))
+}
+
 pub async fn doc(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<serde_json::Value>, WebError> {
-    tracing::info!("Received request for document ID: {}", id);
     let _permit = state.semaphore.acquire().await.unwrap();
+    tracing::info!("Received request for document ID: {}", id);
     let doc_handle = get_handle(&id, &state).await?;
     let checked_out_doc_json =
         doc_handle.with_document(|d| serde_json::to_value(automerge::AutoSerde::from(&*d)))?;
@@ -133,8 +158,8 @@ pub async fn doc_at(
     Path((id, change_hash)): Path<(String, String)>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<serde_json::Value>, WebError> {
-    tracing::info!("Received request for document ID: {id} at change hash: {change_hash}");
     let _permit = state.semaphore.acquire().await.unwrap();
+    tracing::info!("Received request for document ID: {id} at change hash: {change_hash}");
     let doc_handle = get_handle(&id, &state).await?;
 
     let change_hashes = parse_change_hashes(&change_hash)?;
@@ -153,8 +178,8 @@ pub async fn last_heads(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<Vec<ChangeHash>>, WebError> {
-    println!("Received request for last heads of document ID: {}", id);
     let _permit = state.semaphore.acquire().await.unwrap();
+    println!("Received request for last heads of document ID: {}", id);
     let doc_handle = get_handle(&id, &state).await?;
 
     Ok(Json(doc_handle.with_document(|d| d.get_heads())))
@@ -164,8 +189,8 @@ pub async fn list_changes(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<HashMap<String, Change>>, WebError> {
-    tracing::info!("Received request for changes list of document ID: {id}");
     let _permit = state.semaphore.acquire().await.unwrap();
+    tracing::info!("Received request for changes list of document ID: {id}");
     let doc_handle = get_handle(&id, &state).await?;
 
     Ok(Json(doc_handle.with_document(|d| {

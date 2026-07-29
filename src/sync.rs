@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::Arc};
+use std::{net::IpAddr, path::Path, sync::Arc};
 
 use samod::{
     storage::TokioFilesystemStorage, AcceptorHandle, ConcurrencyConfig, ConnFinishedReason,
@@ -36,10 +36,8 @@ impl Drop for SyncServer {
 }
 
 impl SyncServer {
-    pub async fn new() -> Self {
+    pub async fn new(port: u16, data_dir: &Path) -> Self {
         // get home directory
-        let data_dir =
-            std::env::var("DATA_DIR").expect("environment variable DATA_DIR must be set");
         let storage = TokioFilesystemStorage::new(data_dir);
 
         let repo = Repo::build_tokio()
@@ -60,7 +58,7 @@ impl SyncServer {
             }),
         };
         let inner = this.inner.clone();
-        tokio::spawn(async move { inner.server_loop().await });
+        tokio::spawn(async move { inner.server_loop(port).await });
         this
     }
 
@@ -70,9 +68,8 @@ impl SyncServer {
 }
 
 impl SyncServerInner {
-    async fn server_loop(&self) {
+    async fn server_loop(&self, port: u16) {
         // Start the automerge sync server
-        let port: String = std::env::var("PORT").unwrap_or_else(|_| "8085".to_string());
         let addr = format!("0.0.0.0:{}", port);
         let acceptor = self
             .repo
