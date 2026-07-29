@@ -136,7 +136,7 @@ pub async fn describe(
     Ok(Json(ServerDescription {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth: state.config.auth.clone(),
-        sync_port: state.config.sync_port.clone(),
+        sync_port: state.config.public_sync_port.clone(),
         webviewer: state.config.webviewer.clone(),
     }))
 }
