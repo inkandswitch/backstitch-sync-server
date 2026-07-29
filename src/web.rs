@@ -68,7 +68,7 @@ pub struct Change {
 async fn get_handle(id: &str, state: &WebEndpointState) -> Result<DocHandle, WebError> {
     state
         .repo
-        .find(DocumentId::from_str(&id)?)
+        .find(DocumentId::from_str(id)?)
         .await?
         .ok_or(WebError::NotFound("document ID doesn't exist".to_string()))
 }
@@ -124,7 +124,7 @@ pub async fn doc(
     let _permit = state.semaphore.acquire().await.unwrap();
     let doc_handle = get_handle(&id, &state).await?;
     let checked_out_doc_json =
-        doc_handle.with_document(|d| serde_json::to_value(&automerge::AutoSerde::from(&*d)))?;
+        doc_handle.with_document(|d| serde_json::to_value(automerge::AutoSerde::from(&*d)))?;
 
     Ok(Json(checked_out_doc_json))
 }
@@ -183,7 +183,7 @@ pub async fn list_changes(
                 hash,
                 Change {
                     author: change.actor_id().to_string(),
-                    date: date,
+                    date,
                     message: change.message().cloned(),
                 },
             );

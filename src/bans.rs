@@ -23,16 +23,16 @@ impl IpBans {
     pub async fn ban(&self, ip: &IpAddr) {
         let mut ip_bans = self.ip_bans.lock().await;
         let mut ip_failed_attempts = self.ip_failed_attempts.lock().await;
-        let failed_attempts = ip_failed_attempts.get(&ip).cloned().unwrap_or(0);
+        let failed_attempts = ip_failed_attempts.get(ip).cloned().unwrap_or(0);
         if failed_attempts >= self.max_failed_attempts {
             println!(
                 "Client has been banned for {} minutes. IP: {ip}",
                 self.duration.as_secs() / 60
             );
-            ip_failed_attempts.insert(ip.clone(), 0);
-            ip_bans.insert(ip.clone(), std::time::Instant::now());
+            ip_failed_attempts.insert(*ip, 0);
+            ip_bans.insert(*ip, std::time::Instant::now());
         } else {
-            ip_failed_attempts.insert(ip.clone(), failed_attempts + 1);
+            ip_failed_attempts.insert(*ip, failed_attempts + 1);
         }
     }
 
@@ -40,14 +40,14 @@ impl IpBans {
         let mut ip_bans = self.ip_bans.lock().await;
         let mut ip_failed_attempts = self.ip_failed_attempts.lock().await;
         // reset failed attempts
-        ip_failed_attempts.insert(ip.clone(), 0);
+        ip_failed_attempts.insert(*ip, 0);
         // remove from banned list
-        ip_bans.remove(&ip);
+        ip_bans.remove(ip);
     }
 
     pub async fn is_banned(&self, ip: &IpAddr) -> bool {
         let mut ip_bans = self.ip_bans.lock().await;
-        let Some(banned_at) = ip_bans.get(&ip) else {
+        let Some(banned_at) = ip_bans.get(ip) else {
             return false;
         };
 
@@ -59,7 +59,7 @@ impl IpBans {
             );
             true
         } else {
-            ip_bans.remove(&ip);
+            ip_bans.remove(ip);
             false
         }
     }
