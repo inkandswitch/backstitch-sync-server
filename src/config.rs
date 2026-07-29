@@ -5,6 +5,7 @@ use serde::Serialize;
 use url::Url;
 
 #[derive(ValueEnum, Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Authentication {
     None,
 }
