@@ -14,11 +14,6 @@ pub enum Authentication {
 #[command(rename_all = "kebab-case")]
 pub struct CommandConfig {
     #[arg(long)]
-    #[clap(
-        help = "The public sync port to use. This will be given to the Backstitch client during the HTTP handshake."
-    )]
-    pub public_sync_port: u16,
-    #[arg(long)]
     #[clap(help = "The internal localhost port to use for the sync server.")]
     pub sync_port: u16,
     #[arg(long)]

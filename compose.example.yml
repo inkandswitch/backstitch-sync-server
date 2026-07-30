@@ -3,14 +3,10 @@ services:
     image: ghcr.io/inkandswitch/backstitch-sync-server:pr-22
     restart: unless-stopped
     environment:
-      # The desired automerge sync port for Backstitch. This MUST be specified.
-      # The port should probably match the external port specified in `ports`, unless you're doing something weird.
-      PUBLIC_SYNC_PORT: "5000"
       # The authentication scheme to use. This MUST be specified.
       # We currently support no authentication. In a future release, we will support `oidc` for advanced OAuth flows.
       AUTH: "none"
     ports:
-      - "5000:8085" # Change the first part to your desired external sync server port. 
       - "9000:3000" # Change the first part to the desired external HTTP server port. This will be the port entered into the Backstitch client.
                   # If you don't want to enter a port in the Backstitch client, it defaults to port 80. (TODO: Change this to 443 when we have HTTPS?)
     volumes:

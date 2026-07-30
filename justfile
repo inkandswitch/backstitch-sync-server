@@ -16,7 +16,6 @@ run data_dir="./data" sync_port="8085" http_port="3000" profile="release" auth="
     RUST_LOG=automerge_repo=debug,info \
     cargo run --{{profile}} -- \
         --data-dir "{{data_dir}}" \
-        --public-sync-port "{{sync_port}}" \
         --sync-port "{{sync_port}}" \
         --http-port "{{http_port}}" \
         --auth "{{auth}}" \

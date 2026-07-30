@@ -1,24 +1,27 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 
 use automerge::{ChangeHash, ReadDoc};
 use axum::{
-    extract::{Path, State},
+    extract::{ws::WebSocket, ConnectInfo, Path, State, WebSocketUpgrade},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use chrono::{TimeZone, Utc};
-use samod::{DocHandle, DocumentId, Repo};
+use samod::{DocHandle, DocumentId};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 use url::Url;
 
-use crate::config::{Authentication, CommandConfig};
+use crate::{
+    config::{Authentication, CommandConfig},
+    sync::{SocketInfo, SyncServer},
+};
 
 #[derive(Clone)]
 pub struct WebEndpointState {
-    pub repo: Repo,
+    pub server: SyncServer,
     pub semaphore: Arc<Semaphore>,
     pub config: Arc<CommandConfig>,
 }
@@ -71,7 +74,8 @@ pub struct Change {
 
 async fn get_handle(id: &str, state: &WebEndpointState) -> Result<DocHandle, WebError> {
     state
-        .repo
+        .server
+        .repo()
         .find(DocumentId::from_str(id)?)
         .await?
         .ok_or(WebError::NotFound("document ID doesn't exist".to_string()))
@@ -124,7 +128,6 @@ fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value
 pub struct ServerDescription {
     version: String,
     webviewer: Option<Url>,
-    sync_port: u16,
     auth: Authentication,
 }
 
@@ -136,9 +139,21 @@ pub async fn describe(
     Ok(Json(ServerDescription {
         version: env!("CARGO_PKG_VERSION").to_string(),
         auth: state.config.auth.clone(),
-        sync_port: state.config.public_sync_port,
         webviewer: state.config.webviewer.clone(),
     }))
+}
+
+pub async fn sync(
+    ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<WebEndpointState>,
+) -> Response {
+    tracing::info!("Received request to sync");
+    ws.on_failed_upgrade(move |e| tracing::error!("Failed websocket upgrade for {addr}: {e}"))
+        .on_upgrade(async move |socket: WebSocket| {
+            tracing::info!("Upgrade successful for {}", addr.ip());
+            state.server.accept_socket(SocketInfo(addr, socket)).await;
+        })
 }
 
 pub async fn doc(
