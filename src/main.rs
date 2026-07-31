@@ -23,7 +23,7 @@ async fn main() {
 
     let web_semaphore = Arc::new(Semaphore::new(100));
 
-    let sync_server = sync::SyncServer::new(config.sync_port, &config.data_dir).await;
+    let sync_server = sync::SyncServer::new(&config.data_dir).await;
 
     let state = WebEndpointState {
         server: sync_server.clone(),
@@ -44,7 +44,7 @@ async fn main() {
         .route("/sync", any(web::sync))
         .with_state(state)
         .layer(CorsLayer::permissive());
-    let http_addr = format!("0.0.0.0:{}", config.http_port);
+    let http_addr = format!("0.0.0.0:{}", config.port);
     println!("starting HTTP server on {}", http_addr);
 
     let listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();

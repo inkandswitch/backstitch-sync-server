@@ -34,7 +34,7 @@ pub struct SyncServer {
 pub struct SocketInfo(pub SocketAddr, pub WebSocket);
 
 impl SyncServer {
-    pub async fn new(port: u16, data_dir: &Path) -> Self {
+    pub async fn new(data_dir: &Path) -> Self {
         // get home directory
         let storage = TokioFilesystemStorage::new(data_dir);
 
@@ -59,7 +59,7 @@ impl SyncServer {
 
         {
             let this = this.clone();
-            tokio::spawn(async move { this.server_loop(port, sockets_rx).await });
+            tokio::spawn(async move { this.server_loop(sockets_rx).await });
         }
         this
     }
@@ -77,15 +77,16 @@ impl SyncServer {
         self.semaphore.close();
     }
 
-    async fn server_loop(&self, port: u16, mut sockets_rx: mpsc::Receiver<SocketInfo>) {
+    async fn server_loop(&self, mut sockets_rx: mpsc::Receiver<SocketInfo>) {
         // Start the automerge sync server
-        let addr = format!("0.0.0.0:{}", port);
+        // This URL does nothing except participate in logs, since we're accepting websockets
+        // from the HTTP server in the end.
         let acceptor = self
             .repo
-            .make_acceptor(Url::parse(&format!("ws://{addr}")).unwrap())
+            .make_acceptor(Url::parse("0.0.0.0:8080").unwrap())
             .unwrap();
 
-        tracing::info!("started automerge sync server on {addr}");
+        tracing::info!("started automerge sync server...");
 
         loop {
             select! {

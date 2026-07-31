@@ -46,11 +46,7 @@ just
 ```
 
 
-Data will be stored to `./data` by default, but can be overridden.
-
-The server will run a TCP `samod` connection at `localhost:8085`, as well as an HTTP server for server-description and testing at `localhost:3000`.
-
-When you wish to connect with a Backstitch client, enter the `http_port` server URL. The default is `http://localhost:3000`.
+Data will be stored to `./data` by default, but can be overridden. The server's REST API will run at `http://localhost:3000`.
 
 
 ## IMPORTANT: Security!

@@ -14,11 +14,8 @@ pub enum Authentication {
 #[command(rename_all = "kebab-case")]
 pub struct CommandConfig {
     #[arg(long)]
-    #[clap(help = "The internal localhost port to use for the sync server.")]
-    pub sync_port: u16,
-    #[arg(long)]
     #[clap(help = "The internal localhost port to use for the HTTP server.")]
-    pub http_port: u16,
+    pub port: u16,
     #[arg(long)]
     #[clap(help = "The authentication scheme to use.")]
     pub auth: Authentication,

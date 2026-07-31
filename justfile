@@ -3,7 +3,7 @@
 
 [arg('profile', pattern='debug|release')]
 [arg('auth', pattern='none')]
-run data_dir="./data" sync_port="8085" http_port="3000" profile="release" auth="none" webviewer="" :
+run data_dir="./data" port="3000" profile="release" auth="none" webviewer="" :
     #!/usr/bin/env sh
     mkdir -p {{data_dir}}
 
@@ -16,7 +16,6 @@ run data_dir="./data" sync_port="8085" http_port="3000" profile="release" auth="
     RUST_LOG=automerge_repo=debug,info \
     cargo run --{{profile}} -- \
         --data-dir "{{data_dir}}" \
-        --sync-port "{{sync_port}}" \
-        --http-port "{{http_port}}" \
+        --port "{{port}}" \
         --auth "{{auth}}" \
         $webviewer_arg
