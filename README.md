@@ -6,19 +6,23 @@ Join our [Discord](https://discord.gg/SkW9vem5Ez) for support & community!
 
 ## Docker - Easiest Setup
 
-An example Docker Compose configuration is available in `compose.example.yml`. It runs the image from the ghcr.io `backstitch-sync-server` package.
+An example Docker Compose configuration is available in [`examples/docker-compose.yml`](./examples/docker-compose.yml). It runs the image from the ghcr.io `backstitch-sync-server` package.
 
 ```sh
 docker compose -f compose.example.yml up
 ```
 
-See [`compose.example.yml`](./compose.example.yml) for details on configuration.
+See [`examples/docker-compose.yml`](./examples/docker-compose.yml) for details on configuration.
 
-## VPN Tunnel
+If you already have an OpenID Connect authentication server for SSO, check out [`examples/docker-compose.oidc.yml`](./examples/docker-compose.oidc.yml) to set it up.
+
+## Authentication
 
 By default, the server runs at localhost:PORT, and anyone on your local network will be able to access it. If you want to expose it to other team members, we **highly recommend** using a VPN tunneling service like Tailscale or ZeroTier.
 
 Alternatively, you can directly port-forward with your server provider or home router. But since Backstitch Sync Server doesn't (yet) provide authentication, anyone who guesses your project ID will be able to access or edit your data.
+
+For advanced authentication with OpenID Connect, see the example in [`examples/docker-compose.yml`](./examples/docker-compose.basic.yml)
 
 
 ## Building & Manual Installation
@@ -29,22 +33,17 @@ Clone this repository locally. To build and run, first, install [Rust and Cargo]
 cargo install just
 ```
 
-## Usage
-
-To build and run the server with defaults, use `just run`:
+To build and run the production server with defaults, use `just run`:
 
 ```sh
 just run
 ```
 
-For a list of potential configurable arguments:
+The server's REST API will run at `http://localhost:3000`. For a list of potential arguments:
 
 ```sh
-just
+just help
 ```
-
-
-Data will be stored to `./data` by default, but can be overridden. The server's REST API will run at `http://localhost:3000`.
 
 
 ## IMPORTANT: Security!
@@ -52,3 +51,8 @@ Data will be stored to `./data` by default, but can be overridden. The server's 
 This server isn't set up for authentication. If someone guesses the ID of a project, they will be able to access all data associated with the project.
 
 As such, before exposing this server to the internet, it is ***highly*** recommended to hide it behind a separate, secure VPN tunnel, or another method of connection authentication.
+
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md)

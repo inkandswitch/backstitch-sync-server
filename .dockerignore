@@ -2,6 +2,7 @@ target/
 debug/
 data/
 .data/
+tools/
 
 .git/
 .github/

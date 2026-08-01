@@ -1,0 +1,16 @@
+services:
+  rauthy:
+    image: ghcr.io/sebadob/rauthy:0.36.1
+    environment:
+      LOCAL_TEST: true
+      BOOTSTRAP_ADMIN_EMAIL: admin@localhost
+      BOOTSTRAP_ADMIN_PASSWORD_PLAIN: admin
+      BOOTSTRAP_DIR: /app/bootstrap
+    volumes:
+      - rauthy-data:/app/data
+      - ./bootstrap:/app/bootstrap:ro
+    ports:
+      - "8443:8443"
+
+volumes:
+  rauthy-data:

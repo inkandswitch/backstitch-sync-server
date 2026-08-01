@@ -1,0 +1,33 @@
+[
+    {
+        "id": "backstitch",
+        "name": "Backstitch",
+        "secret": null,
+        "redirect_uris": [
+            "https://localhost:58656/login/callback"
+        ],
+        "post_logout_redirect_uris": [
+        ],
+        "allowed_origins": [
+        ],
+        "enabled": true,
+        "flows_enabled": [
+            "authorization_code",
+            "refresh_token"
+        ],
+        "access_token_alg": "EdDSA",
+        "id_token_alg": "EdDSA",
+        "auth_code_lifetime": 300,
+        "access_token_lifetime": 1800,
+        "scopes": [
+            "openid"
+        ],
+        "default_scopes": [
+            "openid"
+        ],
+        "challenges": [
+            "S256"
+        ],
+        "force_mfa": false
+    }
+]
