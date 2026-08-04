@@ -127,6 +127,7 @@ fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value
 #[derive(Serialize)]
 pub struct ServerDescription {
     version: String,
+    minimum_backstitch_version: String,
     webviewer: Option<Url>,
     auth: String,
     oidc_issuer: Option<Url>,
@@ -143,6 +144,7 @@ pub async fn describe(
     Ok(Json(ServerDescription {
         version: env!("CARGO_PKG_VERSION").to_string(),
         webviewer: state.config.webviewer.clone(),
+        minimum_backstitch_version: state.config.minimum_backstitch_version.clone(),
         auth: match auth {
             Authentication::None => "none".to_string(),
             Authentication::Oidc(_) => "oidc".to_string(),

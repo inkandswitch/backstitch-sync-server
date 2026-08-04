@@ -44,6 +44,12 @@ pub struct CommandConfig {
     pub webviewer_endpoint_auth: bool,
     #[arg(
         long,
+        help = "The minimum supported Backstitch version.",
+        default_value = "2.1.0-alpha"
+    )]
+    pub minimum_backstitch_version: String,
+    #[arg(
+        long,
         help = "The authentication scheme to use.",
         default_value = "none"
     )]
