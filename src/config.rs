@@ -50,6 +50,11 @@ pub struct CommandConfig {
     pub minimum_backstitch_version: String,
     #[arg(
         long,
+        help = "Whether the resource server should allow invalid certifications. VERY DANGEROUS: This should only be used in dev builds!"
+    )]
+    pub accept_invalid_certs: bool,
+    #[arg(
+        long,
         help = "The authentication scheme to use.",
         default_value = "none"
     )]

@@ -23,6 +23,7 @@ tokio-util = "0.7.19"
 clap = { version = "4.6.5", features = ["derive"] }
 url = { version = "2.5.8", features = ["serde"] }
 jwt-authorizer = { version = "0.15.0", git = "https://github.com/LilithSilver/jwt-authorizer", branch = "silver-fork" }
+reqwest = "0.13.4"
 
 # create profile release_debug
 [profile.release_debug]

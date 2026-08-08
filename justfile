@@ -27,7 +27,7 @@ dev profile="release" *args:
 
     RUST_BACKTRACE=full \
     RUST_LOG=automerge_repo=debug,info \
-    cargo run --{{profile}} -- \
+    cargo run {{if profile == "release" { "--release" } else { "" }}} -- \
         --data-dir "./data" \
         --port 3000 \
         {{args}}
@@ -55,9 +55,10 @@ dev-oidc profile="release" *args:
 
     RUST_BACKTRACE=full \
     RUST_LOG=automerge_repo=debug,info \
-    cargo run --{{profile}} -- \
+    cargo run {{if profile == "release" { "--release" } else { "" }}} -- \
         --data-dir "./data" \
         --port 3001 \
         --auth "oidc" \
         --oidc-issuer "https://localhost:8443/auth/v1/" \
+        --accept-invalid-certs \
         {{args}}

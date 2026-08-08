@@ -4,7 +4,7 @@
         "name": "Backstitch",
         "secret": null,
         "redirect_uris": [
-            "https://localhost:58656/login/callback"
+            "http://localhost:58656/"
         ],
         "post_logout_redirect_uris": [
         ],

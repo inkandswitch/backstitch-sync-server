@@ -5,7 +5,8 @@ use axum::{
     Router,
 };
 use clap::Parser;
-use jwt_authorizer::{Authorizer, IntoLayer, JwtAuthorizer};
+use jwt_authorizer::{Authorizer, IntoLayer, JwtAuthorizer, Validation};
+use reqwest::Client;
 use tokio::sync::Semaphore;
 use tower_http::cors::CorsLayer;
 
@@ -50,7 +51,20 @@ async fn main() {
 
     let auth = config.authentication();
     if let Authentication::Oidc(oidc_auth) = auth {
-        let auth: Authorizer = JwtAuthorizer::from_jwks_url(&oidc_auth.issuer.to_string())
+        let http_client = Client::builder()
+            .tls_danger_accept_invalid_certs(config.accept_invalid_certs)
+            .build()
+            .unwrap();
+        let auth: Authorizer = JwtAuthorizer::from_oidc(&oidc_auth.issuer.to_string())
+            .http_client(http_client)
+            .validation(
+                Validation::new()
+                    .aud(&[oidc_auth.client_id])
+                    .iss(&[oidc_auth.issuer.to_string()])
+                    .exp(true)
+                    .nbf(true)
+                    .leeway(20),
+            )
             .build()
             .await
             .unwrap();
