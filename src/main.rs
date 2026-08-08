@@ -50,7 +50,7 @@ async fn main() {
 
     let auth = config.authentication();
     if let Authentication::Oidc(oidc_auth) = auth {
-        let auth: Authorizer = JwtAuthorizer::from_jwks_url(&oidc_auth.endpoint.to_string())
+        let auth: Authorizer = JwtAuthorizer::from_jwks_url(&oidc_auth.issuer.to_string())
             .build()
             .await
             .unwrap();
