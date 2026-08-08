@@ -6,7 +6,7 @@ use url::Url;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OidcConfig {
-    pub endpoint: Url,
+    pub issuer: Url,
     pub redirect_port: u16,
     pub client_id: String,
 }
@@ -75,7 +75,7 @@ impl CommandConfig {
         match self.auth {
             AuthenticationMode::None => Authentication::None,
             AuthenticationMode::Oidc => Authentication::Oidc(OidcConfig {
-                endpoint: self.oidc_issuer.clone().unwrap(),
+                issuer: self.oidc_issuer.clone().unwrap(),
                 client_id: self.oidc_client_id.clone(),
                 redirect_port: self.oidc_redirect_port,
             }),

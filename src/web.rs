@@ -159,7 +159,7 @@ pub async fn describe(
         },
         oidc_issuer: match &auth {
             Authentication::None => None,
-            Authentication::Oidc(oidc_config) => Some(oidc_config.endpoint.clone()),
+            Authentication::Oidc(oidc_config) => Some(oidc_config.issuer.clone()),
         },
     }))
 }

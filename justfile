@@ -29,6 +29,7 @@ dev profile="release" *args:
     RUST_LOG=automerge_repo=debug,info \
     cargo run --{{profile}} -- \
         --data-dir "./data" \
+        --port 3000 \
         {{args}}
 
 [arg('profile', pattern='debug|release')]
@@ -56,6 +57,7 @@ dev-oidc profile="release" *args:
     RUST_LOG=automerge_repo=debug,info \
     cargo run --{{profile}} -- \
         --data-dir "./data" \
+        --port 3001 \
         --auth "oidc" \
-        --oidc-issuer "https://localhost:8443/auth/v1" \
+        --oidc-issuer "https://localhost:8443/auth/v1/" \
         {{args}}

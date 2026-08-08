@@ -5,7 +5,11 @@ We'd love your help developing the Backstitch Sync Server. Here's how to get sta
 
 ## Prerequisites
 
-First, install Rust and Cargo. Then install `just` with `cargo install just`. 
+First, clone this repository locally.
+
+Then, install Rust and Cargo.
+
+Lastly, install `just` with `cargo install just`. 
 
 ## Basic Development
 
