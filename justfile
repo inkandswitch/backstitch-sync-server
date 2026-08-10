@@ -62,3 +62,21 @@ dev-oidc profile="release" *args:
         --oidc-issuer "https://localhost:8443/auth/v1/" \
         --accept-invalid-certs \
         {{args}}
+
+        [arg('profile', pattern='debug|release')]
+
+[arg('profile', pattern='debug|release')]
+dev-endless profile="release" *args:
+    #!/usr/bin/env sh
+
+    mkdir -p "./data"
+
+
+    RUST_BACKTRACE=full \
+    RUST_LOG=automerge_repo=debug,info \
+    cargo run {{if profile == "release" { "--release" } else { "" }}} -- \
+        --data-dir "./data" \
+        --port 3001 \
+        --auth "oidc" \
+        --oidc-issuer "https://account-dev.endlessstudios.com" \
+        {{args}}

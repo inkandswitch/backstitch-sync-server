@@ -130,7 +130,8 @@ pub struct ServerDescription {
     minimum_backstitch_version: String,
     webviewer: Option<Url>,
     auth: String,
-    oidc_issuer: Option<Url>,
+    // This has to be a string, because the Url crate likes to add a bad trailing slash.
+    oidc_issuer: Option<String>,
     oidc_client_id: Option<String>,
     oidc_redirect_port: Option<u16>,
 }

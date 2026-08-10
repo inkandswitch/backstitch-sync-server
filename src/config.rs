@@ -6,7 +6,8 @@ use url::Url;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OidcConfig {
-    pub issuer: Url,
+    // This has to be a string, because the Url crate likes to add a bad trailing slash.
+    pub issuer: String,
     pub redirect_port: u16,
     pub client_id: String,
 }
@@ -59,8 +60,9 @@ pub struct CommandConfig {
         default_value = "none"
     )]
     auth: AuthenticationMode,
+    // This has to be a string, because the Url crate likes to add a bad trailing slash.
     #[arg(long, help = "The OIDC issuer URL.", required_if_eq("auth", "oidc"))]
-    oidc_issuer: Option<Url>,
+    oidc_issuer: Option<String>,
     #[arg(
         long,
         help = "The client ID port specified while registering the Backstitch client.",
