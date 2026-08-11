@@ -79,4 +79,5 @@ dev-endless profile="release" *args:
         --port 3001 \
         --auth "oidc" \
         --oidc-issuer "https://account-dev.endlessstudios.com" \
+        --oidc-resource "https://api-dev.endlessstudios.com" \
         {{args}}

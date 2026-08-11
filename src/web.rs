@@ -134,6 +134,8 @@ pub struct ServerDescription {
     oidc_issuer: Option<String>,
     oidc_client_id: Option<String>,
     oidc_redirect_port: Option<u16>,
+    // TODO: Remove this once Endless implements RFC 9728
+    oidc_resource: Option<String>,
 }
 
 pub async fn describe(
@@ -146,7 +148,7 @@ pub async fn describe(
         version: env!("CARGO_PKG_VERSION").to_string(),
         webviewer: state.config.webviewer.clone(),
         minimum_backstitch_version: state.config.minimum_backstitch_version.clone(),
-        auth: match auth {
+        auth: match &auth {
             Authentication::None => "none".to_string(),
             Authentication::Oidc(_) => "oidc".to_string(),
         },
@@ -161,6 +163,10 @@ pub async fn describe(
         oidc_issuer: match &auth {
             Authentication::None => None,
             Authentication::Oidc(oidc_config) => Some(oidc_config.issuer.clone()),
+        },
+        oidc_resource: match &auth {
+            Authentication::None => None,
+            Authentication::Oidc(oidc_config) => oidc_config.resource.clone(),
         },
     }))
 }

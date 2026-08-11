@@ -10,6 +10,7 @@ pub struct OidcConfig {
     pub issuer: String,
     pub redirect_port: u16,
     pub client_id: String,
+    pub resource: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +76,13 @@ pub struct CommandConfig {
         default_value = "58656"
     )]
     oidc_redirect_port: u16,
+    // TODO: Remove this once Endless implements RFC 9728
+    #[arg(
+        long,
+        help = "Some OIDC providers require the `resource` parameter to be set to a specific URL to grant access. \
+            This parameter tells Backstitch to use that URL."
+    )]
+    oidc_resource: Option<String>,
 }
 
 impl CommandConfig {
@@ -85,6 +93,7 @@ impl CommandConfig {
                 issuer: self.oidc_issuer.clone().unwrap(),
                 client_id: self.oidc_client_id.clone(),
                 redirect_port: self.oidc_redirect_port,
+                resource: self.oidc_resource.clone(),
             }),
         }
     }

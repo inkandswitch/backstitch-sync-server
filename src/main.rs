@@ -55,11 +55,15 @@ async fn main() {
             .tls_danger_accept_invalid_certs(config.accept_invalid_certs)
             .build()
             .unwrap();
+        let mut aud = vec![oidc_auth.client_id];
+        if let Some(resource) = oidc_auth.resource {
+            aud.push(resource);
+        }
         let auth: Authorizer = JwtAuthorizer::from_oidc(&oidc_auth.issuer.to_string())
             .http_client(http_client)
             .validation(
                 Validation::new()
-                    .aud(&[oidc_auth.client_id])
+                    .aud(&aud)
                     .iss(&[oidc_auth.issuer.to_string()])
                     .exp(true)
                     .nbf(true)
