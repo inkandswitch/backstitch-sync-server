@@ -203,6 +203,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "backstitch-sync-server"
+version = "2.0.0"
+dependencies = [
+ "automerge",
+ "axum",
+ "chrono",
+ "clap",
+ "futures",
+ "jwt-authorizer",
+ "rayon",
+ "reqwest",
+ "samod",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2381,32 +2407,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "server"
-version = "2.0.0"
-dependencies = [
- "automerge",
- "axum",
- "chrono",
- "clap",
- "futures",
- "jwt-authorizer",
- "rayon",
- "reqwest",
- "samod",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tower-http 0.7.0",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "url",
- "uuid",
 ]
 
 [[package]]
