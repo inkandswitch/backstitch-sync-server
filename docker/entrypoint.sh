@@ -6,7 +6,7 @@ set -- \
     --port "3000" \
     --auth "${AUTH:-none}" \
     --oidc-redirect-port "${OIDC_REDIRECT_PORT:-58656}" \
-    --oidc-client-id "${OIDC_REDIRECT_PORT:-backstitch}"
+    --oidc-client-id "${OIDC_CLIENT_ID:-backstitch}"
 
 if [ -n "${WEBVIEWER:-}" ]; then
     set -- "$@" --webviewer "$WEBVIEWER"
