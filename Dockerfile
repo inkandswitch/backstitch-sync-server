@@ -8,6 +8,8 @@ RUN cargo build --release
 
 FROM debian:13-slim AS runtime
 
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin backstitch \
     && mkdir -p /data \
     && chown -R backstitch:backstitch /data
