@@ -44,18 +44,19 @@ async fn main() {
         config: Arc::new(config.clone()),
     };
 
-    let public_routes = Router::new().route("/describe", get(web::describe));
+    let mut public_routes = Router::new().route("/describe", get(web::describe));
+
+    if let Some(path) = &config.webviewer_path {
+        public_routes = public_routes.fallback_service(ServeDir::new(path));
+    } else {
+        public_routes = public_routes.route("/", get(|| async { "no webviewer provided" }));
+    }
 
     let mut web_routes = Router::new()
-        // TODO: make this the webviewer
         .route("/doc/{id}", get(web::doc))
         .route("/last_heads/{id}", get(web::last_heads))
         .route("/doc_at/{id}/{change_hash}", get(web::doc_at))
         .route("/list_changes/{id}", get(web::list_changes));
-
-    if let Some(path) = &config.webviewer_path {
-        web_routes = web_routes.fallback_service(ServeDir::new(path));
-    }
 
     let mut sync_routes = Router::new().route("/sync", any(web::sync));
 
