@@ -8,7 +8,7 @@ use clap::Parser;
 use jwt_authorizer::{Authorizer, IntoLayer, JwtAuthorizer, Validation};
 use reqwest::Client;
 use tokio::sync::Semaphore;
-use tower_http::cors::CorsLayer;
+use tower_http::{cors::CorsLayer, services::ServeDir};
 
 use crate::{
     config::{Authentication, CommandConfig},
@@ -26,6 +26,14 @@ async fn main() {
     let config = CommandConfig::parse();
     tracing::initialize_tracing();
 
+    if !config.no_webviewer_auth
+        && config.webviewer_path.is_some()
+        && matches!(config.authentication(), Authentication::Oidc(_))
+    {
+        ::tracing::error!("Currently the Webviewer does not support OpenID Connect authentication. It will be inaccessible. \
+            To disable authentication on the webviewer, set webviewer_endpoint_auth to false.");
+    }
+
     let web_semaphore = Arc::new(Semaphore::new(100));
 
     let sync_server = sync::SyncServer::new(&config.data_dir).await;
@@ -36,16 +44,18 @@ async fn main() {
         config: Arc::new(config.clone()),
     };
 
-    let public_routes = Router::new()
-        // TODO: make this the webviewer
-        .route("/", get(|| async { "fetch documents with /doc/{id}" }))
-        .route("/describe", get(web::describe));
+    let public_routes = Router::new().route("/describe", get(web::describe));
 
     let mut web_routes = Router::new()
+        // TODO: make this the webviewer
         .route("/doc/{id}", get(web::doc))
         .route("/last_heads/{id}", get(web::last_heads))
         .route("/doc_at/{id}/{change_hash}", get(web::doc_at))
         .route("/list_changes/{id}", get(web::list_changes));
+
+    if let Some(path) = &config.webviewer_path {
+        web_routes = web_routes.fallback_service(ServeDir::new(path));
+    }
 
     let mut sync_routes = Router::new().route("/sync", any(web::sync));
 
@@ -75,7 +85,7 @@ async fn main() {
         let layer = auth.into_layer();
         sync_routes = sync_routes.layer(layer.clone());
 
-        if config.webviewer_endpoint_auth {
+        if !config.no_webviewer_auth {
             web_routes = web_routes.layer(layer);
         }
     }

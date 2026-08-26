@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 use serde::Serialize;
-use url::Url;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OidcConfig {
@@ -35,15 +34,20 @@ pub struct CommandConfig {
     )]
     pub port: u16,
     #[arg(long, help = "The webviewer URL to recommend, if any.")]
-    pub webviewer: Option<Url>,
+    pub webviewer: Option<String>,
+    #[arg(
+        long,
+        help = "The path of the webviewer frontend to serve at the `/` route, if any."
+    )]
+    pub webviewer_path: Option<PathBuf>,
     #[arg(long, help = "The data directory to use.")]
     pub data_dir: PathBuf,
     #[arg(
         long,
         help = "If we should apply our authentication scheme (if any) to the Webviewer.",
-        default_value = "true"
+        default_value_t = false
     )]
-    pub webviewer_endpoint_auth: bool,
+    pub no_webviewer_auth: bool,
     #[arg(
         long,
         help = "The minimum supported Backstitch version.",

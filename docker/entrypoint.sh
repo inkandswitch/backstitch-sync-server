@@ -16,4 +16,12 @@ if [ -n "${OIDC_ISSUER:-}" ]; then
     set -- "$@" --oidc-issuer "$OIDC_ISSUER"
 fi
 
+if [ -n "${OIDC_RESOURCE:-}" ]; then
+    set -- "$@" --oidc-resource "$OIDC_RESOURCE"
+fi
+
+if [ "${NO_WEBVIEWER_AUTH:-false}" = "true" ]; then
+    set -- "$@" --no-webviewer-auth
+fi
+
 exec backstitch-sync-server "$@"

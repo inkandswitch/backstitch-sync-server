@@ -12,7 +12,6 @@ use samod::{DocHandle, DocumentId};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
-use url::Url;
 
 use crate::{
     config::{Authentication, CommandConfig},
@@ -128,7 +127,8 @@ fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value
 pub struct ServerDescription {
     version: String,
     minimum_backstitch_version: String,
-    webviewer: Option<Url>,
+    sync: String,
+    webviewer: Option<String>,
     auth: String,
     // This has to be a string, because the Url crate likes to add a bad trailing slash.
     oidc_issuer: Option<String>,
@@ -148,6 +148,7 @@ pub async fn describe(
         version: env!("CARGO_PKG_VERSION").to_string(),
         webviewer: state.config.webviewer.clone(),
         minimum_backstitch_version: state.config.minimum_backstitch_version.clone(),
+        sync: "sync".to_string(),
         auth: match &auth {
             Authentication::None => "none".to_string(),
             Authentication::Oidc(_) => "oidc".to_string(),

@@ -7,9 +7,14 @@ services:
       # When using AUTH: "none", it is highly recommended to hide the server behind a VPN tunnel service like Tailscale or ZeroTier.
       # Those will provide secure, easy authentication setup.
       AUTH: "none"
+
+    # Change the first part to the desired external HTTP server port. This will be the port entered into the Backstitch client.
+    # If you don't want to enter a port in the Backstitch client, it defaults to port 80.
+    # We recommend using Caddy or a similar reverse-proxy service to setup HTTPS instead of plain HTTP.
+    # See `docker-compose.oidc.yml` for a basic Caddy setup.
     ports:
-      - "80:3000" # Change the first part to the desired external HTTP server port. This will be the port entered into the Backstitch client.
-                  # If you don't want to enter a port in the Backstitch client, it defaults to port 80. (TODO: Change this to 443 when we have HTTPS?)
+      - "80:3000"
+
     volumes:
       # For data persistance, mount this backstitch-data volume.
       - backstitch-data:/data

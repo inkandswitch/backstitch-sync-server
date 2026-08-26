@@ -78,6 +78,9 @@ dev-endless profile="release" *args:
         --data-dir "./data" \
         --port 3001 \
         --auth "oidc" \
-        --oidc-issuer "https://account-dev.endlessstudios.com" \
-        --oidc-resource "https://api-dev.endlessstudios.com" \
+        --oidc-issuer "https://account.endlessstudios.com" \
+        --oidc-resource "https://api.endlessstudios.com" \
+        --webviewer "/" \
+        --webviewer-path "../backstitch-webviewer/dist" \
+        --no-webviewer-auth \
         {{args}}
