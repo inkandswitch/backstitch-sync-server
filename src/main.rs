@@ -74,7 +74,7 @@ async fn main() {
             .validation(
                 Validation::new()
                     .aud(&aud)
-                    .iss(&[oidc_auth.issuer.to_string()])
+                    .iss(std::slice::from_ref(&oidc_auth.issuer))
                     .exp(true)
                     .nbf(true)
                     .leeway(20),
