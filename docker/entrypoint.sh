@@ -12,6 +12,11 @@ if [ -n "${WEBVIEWER:-}" ]; then
     set -- "$@" --webviewer "$WEBVIEWER"
 fi
 
+if [ -n "${WEBVIEWER_PATH:-}" ]; then
+    set -- "$@" --webviewer-path "$WEBVIEWER_PATH"
+fi
+
+
 if [ -n "${OIDC_ISSUER:-}" ]; then
     set -- "$@" --oidc-issuer "$OIDC_ISSUER"
 fi
