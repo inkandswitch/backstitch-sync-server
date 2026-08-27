@@ -147,7 +147,7 @@ pub async fn describe(
     Ok(Json(ServerDescription {
         version: env!("CARGO_PKG_VERSION").to_string(),
         webviewer: state.config.webviewer.clone(),
-        minimum_backstitch_version: state.config.minimum_backstitch_version.clone(),
+        minimum_backstitch_version: "3.0.0".to_string(),
         sync: "sync".to_string(),
         auth: match &auth {
             Authentication::None => "none".to_string(),

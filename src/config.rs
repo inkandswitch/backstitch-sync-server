@@ -50,12 +50,6 @@ pub struct CommandConfig {
     pub no_webviewer_auth: bool,
     #[arg(
         long,
-        help = "The minimum supported Backstitch version.",
-        default_value = "2.1.0-alpha"
-    )]
-    pub minimum_backstitch_version: String,
-    #[arg(
-        long,
         help = "Whether the resource server should allow invalid certifications. VERY DANGEROUS: This should only be used in dev builds!"
     )]
     pub accept_invalid_certs: bool,
