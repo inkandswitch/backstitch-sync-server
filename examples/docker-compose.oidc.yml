@@ -1,6 +1,6 @@
 # This is a configuration example with OpenID Connect.
 # You'll need an OpenID Connect authentication endpoint, in addition to this server.
-# This is recommended only for enterprise users with an existing SSO OAuth backend.
+# This is recommended only for advanced users with an existing SSO OAuth backend.
 services:
   backstitch-sync-server:
     image: ghcr.io/inkandswitch/backstitch-sync-server:latest
@@ -14,47 +14,22 @@ services:
       OIDC_CLIENT_ID: "backstitch"
       # The port of the OpenID Connect Redirect URL registered with your OIDC provider. This can be an arbitrary port.
       # By default, it is 58656.
-      # The full registered redirect URL ***MUST*** be "http://localhost:PORT"!
+      # The full registered redirect URL must be "http://localhost:PORT"!
       OIDC_REDIRECT_PORT: "58656"
       # Some OIDC providers require the `resource` parameter to be set to a specific URL to grant access.
       # This parameter tells Backstitch to use that URL.
       OIDC_RESOURCE: "https://api.example.com"
-      # The Webviewer URL to recommend for Backstitch, if any.
-      # This can be a relative path. To access a Webviewer instance at "/", just make this "/".
-      WEBVIEWER: "https://web.backstitch.dev/"
-      # Skip authentication for the webviewer HTTP ports.
-      # This is dangerous: If your server is accessible to the open internet, anyone could read your projects.
-      NO_WEBVIEWER_AUTH: "false"
 
-    expose:
-      - "3000"
+    # Setting this to "80", as shown, will expose the HTTP server directly.
+    # If you have a domain name, we highly recommend using a HTTPS reverse-proxy
+    # service like Caddy instead.
+    # For an example with Caddy, see `docker-compose.caddy.yaml`. 
+    ports:
+      - "80:3000"
 
     volumes:
       # For data persistance, mount this backstitch-data volume.
       - backstitch-data:/data
-  
-  # HIGHLY RECOMMENDED: Enable HTTPS by adding a `caddy` reverse-proxy here.
-  # You'll need a Caddyfile in ./conf/Caddyfile, relative to this docker-compose.yml file.
-  # The Caddyfile should look something like this:
-  # backstitch.example.com {
-  #  reverse_proxy backstitch-sync-server:3000
-  #}
-
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./conf:/etc/caddy
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - backstitch-sync-server
 
 volumes:
   backstitch-data:
-  caddy-data:
-  caddy-config:

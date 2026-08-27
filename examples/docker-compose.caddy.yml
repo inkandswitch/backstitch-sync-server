@@ -1,0 +1,45 @@
+# This is a configuration example with Caddy to provide HTTPS.
+# This is for servers with a configured domain-name only.
+# For servers without a domain name, HTTPS may be more difficult, and might
+# require installing Caddy's self-signed certificate on client devices.
+services:
+  backstitch-sync-server:
+    image: ghcr.io/inkandswitch/backstitch-sync-server:latest
+    restart: unless-stopped
+    environment:
+      AUTH: "none"
+
+    # Instead of publishing `ports` directly, expose the port 3000 to
+    # other Docker containers.
+    expose:
+      - "3000"
+
+    volumes:
+      # For data persistance, mount this backstitch-data volume.
+      - backstitch-data:/data
+
+  # For HTTPS, you'll need a public domain.
+  # You'll need a Caddyfile in ./conf/Caddyfile, relative to this docker-compose.yml file.
+  # The Caddyfile should look something like this:
+  #
+  #     backstitch.example.com {
+  #      reverse_proxy backstitch-sync-server:3000
+  #     }
+  #
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./conf:/etc/caddy
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backstitch-sync-server
+
+volumes:
+  backstitch-data:
+  caddy-data:
+  caddy-config:

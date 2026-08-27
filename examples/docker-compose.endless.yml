@@ -1,0 +1,67 @@
+# This is a full, real-world configuration example, using Endless Access's OpenID Connect implementation.
+# This won't be suitable for organizations other than Endless Access, but might provide configuration inspiration for others.
+services:
+  backstitch-webviewer:
+    image: ghcr.io/inkandswitch/backstitch-webviewer:latest
+    environment:
+      BACKSTITCH_API_URL: / # we're serving this at the root of our API
+    volumes:
+      - webviewer:/site
+ 
+  backstitch-sync-server:
+    image: ghcr.io/inkandswitch/backstitch-sync-server:latest
+    restart: unless-stopped
+    environment:
+      # The authentication scheme to use. This MUST be specified.
+      AUTH: "oidc"
+      # The OpenID Connect issuer URL to authenticate with.
+      OIDC_ISSUER: "https://account.endlessstudios.com"
+      # The OpenID Connect Client ID registered with your OIDC provider.
+      OIDC_CLIENT_ID: "backstitch"
+      # The port of the OpenID Connect Redirect URL registered with your OIDC provider. This can be an arbitrary port.
+      # By default, it is 58656.
+      # The full registered redirect URL ***MUST*** be "http://localhost:PORT"!
+      OIDC_REDIRECT_PORT: "58656"
+      # Some OIDC providers require the `resource` parameter to be set to a specific URL to grant access.
+      # This parameter tells Backstitch to use that URL.
+      OIDC_RESOURCE: "https://api.endlessstudios.com"
+      # Tell the Client to use the webviewer at our own URL
+      WEBVIEWER: "/"
+      # We mounted the webviewer at /webviewer.
+      WEBVIEWER_PATH: "/webviewer"
+      # Skip authentication for the webviewer HTTP ports.
+      # This is dangerous: If your server is accessible to the open internet, anyone could read your projects.
+      NO_WEBVIEWER_AUTH: "true"
+
+    expose:
+      - "3000"
+
+    volumes:
+      # For data persistance, mount this backstitch-data volume.
+      - backstitch-data:/data
+      - webviewer:/webviewer
+
+  # You'll need a Caddyfile in ./conf/Caddyfile, relative to this docker-compose.yml file.
+  # The Caddyfile should look something like this:
+  # backstitch.example.com {
+  #  reverse_proxy backstitch-sync-server:3122
+  #}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./conf:/etc/caddy
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backstitch-sync-server
+
+volumes:
+  webviewer:
+  backstitch-data:
+  caddy-data:
+  caddy-config:
