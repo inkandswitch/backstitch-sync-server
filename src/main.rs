@@ -1,14 +1,16 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
+    http::HeaderValue,
     routing::{any, get},
     Router,
 };
 use clap::Parser;
 use jwt_authorizer::{Authorizer, IntoLayer, JwtAuthorizer, Validation};
-use reqwest::Client;
+use reqwest::{header, Client};
 use tokio::sync::Semaphore;
-use tower_http::{cors::CorsLayer, services::ServeDir};
+use tower::ServiceBuilder;
+use tower_http::{cors::CorsLayer, services::ServeDir, set_header::SetResponseHeaderLayer};
 
 use crate::{
     config::{Authentication, CommandConfig},
@@ -47,7 +49,18 @@ async fn main() {
     let mut public_routes = Router::new().route("/describe", get(web::describe));
 
     if let Some(path) = &config.webviewer_path {
-        public_routes = public_routes.fallback_service(ServeDir::new(path));
+        // These response header layers are needed for WASM
+        let fallback_service = ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(
+                header::HeaderName::from_static("cross-origin-opener-policy"),
+                HeaderValue::from_static("same-origin"),
+            ))
+            .layer(SetResponseHeaderLayer::overriding(
+                header::HeaderName::from_static("cross-origin-embedder-policy"),
+                HeaderValue::from_static("require-corp"),
+            ))
+            .service(ServeDir::new(path));
+        public_routes = public_routes.fallback_service(fallback_service);
     } else {
         public_routes = public_routes.route("/", get(|| async { "no webviewer provided" }));
     }
