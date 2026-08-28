@@ -1,13 +1,17 @@
-use std::{net::IpAddr, path::Path, sync::Arc};
+use std::{
+    net::{IpAddr, SocketAddr},
+    path::Path,
+    sync::Arc,
+};
 
+use axum::extract::ws::WebSocket;
 use samod::{
     storage::TokioFilesystemStorage, AcceptorHandle, ConcurrencyConfig, ConnFinishedReason,
-    NeverAnnounce, Repo, Transport, Url,
+    NeverAnnounce, Repo, Url,
 };
 use tokio::{
-    net::{TcpListener, TcpStream},
     select,
-    sync::Semaphore,
+    sync::{mpsc, OwnedSemaphorePermit, Semaphore},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -16,27 +20,21 @@ use crate::bans::IpBans;
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
 const MAX_FAILED_ATTEMPTS: i64 = 50;
 const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-
-pub struct SyncServer {
-    inner: Arc<SyncServerInner>,
-}
+const MAX_CONNECTIONS: usize = 500;
 
 #[derive(Clone)]
-struct SyncServerInner {
+pub struct SyncServer {
     repo: Repo,
     bans: IpBans,
     token: CancellationToken,
     semaphore: Arc<Semaphore>,
+    sockets_tx: tokio::sync::mpsc::Sender<SocketInfo>,
 }
 
-impl Drop for SyncServer {
-    fn drop(&mut self) {
-        self.inner.token.cancel();
-    }
-}
+pub struct SocketInfo(pub SocketAddr, pub WebSocket);
 
 impl SyncServer {
-    pub async fn new(port: u16, data_dir: &Path) -> Self {
+    pub async fn new(data_dir: &Path) -> Self {
         // get home directory
         let storage = TokioFilesystemStorage::new(data_dir);
 
@@ -49,60 +47,73 @@ impl SyncServer {
             .load()
             .await;
 
+        let (sockets_tx, sockets_rx) = mpsc::channel(MAX_CONNECTIONS * 2);
+
         let this = Self {
-            inner: Arc::new(SyncServerInner {
-                repo,
-                bans: IpBans::new(BAN_DURATION, MAX_FAILED_ATTEMPTS),
-                token: CancellationToken::new(),
-                semaphore: Arc::new(Semaphore::new(500)),
-            }),
+            repo,
+            bans: IpBans::new(BAN_DURATION, MAX_FAILED_ATTEMPTS),
+            token: CancellationToken::new(),
+            semaphore: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+            sockets_tx,
         };
-        let inner = this.inner.clone();
-        tokio::spawn(async move { inner.server_loop(port).await });
+
+        {
+            let this = this.clone();
+            tokio::spawn(async move { this.server_loop(sockets_rx).await });
+        }
         this
     }
 
     pub fn repo(&self) -> Repo {
-        self.inner.repo.clone()
+        self.repo.clone()
     }
-}
 
-impl SyncServerInner {
-    async fn server_loop(&self, port: u16) {
+    pub async fn accept_socket(&self, info: SocketInfo) {
+        let _ = self.sockets_tx.send(info).await;
+    }
+
+    pub async fn shutdown(&self) {
+        self.token.cancel();
+        self.semaphore.close();
+    }
+
+    async fn server_loop(&self, mut sockets_rx: mpsc::Receiver<SocketInfo>) {
         // Start the automerge sync server
-        let addr = format!("0.0.0.0:{}", port);
+        // This URL does nothing except participate in logs, since we're accepting websockets
+        // from the HTTP server in the end.
         let acceptor = self
             .repo
-            .make_acceptor(Url::parse(&format!("tcp://{addr}")).unwrap())
+            .make_acceptor(Url::parse("0.0.0.0:8080").unwrap())
             .unwrap();
-        let listener = TcpListener::bind(&addr).await.unwrap();
 
-        tracing::info!("started automerge sync server on {addr}");
+        tracing::info!("started automerge sync server...");
 
         loop {
             select! {
                 _ = self.token.cancelled() => break,
-                result = listener.accept() => {
-                    let _permit = self.semaphore.clone().acquire_owned().await;
-                    match result {
-                        Ok((socket, addr)) => {
-                            let ip = addr.ip();
-                            if self.bans.is_banned(&ip).await {
-                                continue;
-                            }
-                            tracing::info!("Client connected. IP: {ip}");
-                            let acceptor = acceptor.clone();
-                            // Handle as automerge connection
-                            let this = self.clone();
-                            tokio::spawn(async move {
-                                select! {
-                                    _ = this.handle_connection(ip, acceptor, socket) => {}
-                                    _ = this.token.cancelled() => {}
-                                }
-                            });
-                        }
-                        Err(e) => tracing::error!("couldn't get client: {:?}", e),
+                info = sockets_rx.recv() => {
+                    let Some(SocketInfo(addr, socket)) = info else {
+                        break;
+                    };
+
+                    let ip = addr.ip();
+                    if self.bans.is_banned(&ip).await {
+                        continue;
                     }
+
+                    let Ok(permit) = self.semaphore.clone().acquire_owned().await else {
+                        break;
+                    };
+                    tracing::info!("Client connected. IP: {ip}");
+                    let acceptor = acceptor.clone();
+                    // Handle as automerge connection
+                    let this = self.clone();
+                    tokio::spawn(async move {
+                        select! {
+                            _ = this.handle_connection(ip, acceptor, socket, permit) => {}
+                            _ = this.token.cancelled() => {}
+                        }
+                    });
                 }
             }
         }
@@ -110,8 +121,14 @@ impl SyncServerInner {
         self.repo.stop().await;
     }
 
-    async fn handle_connection(&self, ip: IpAddr, acceptor: AcceptorHandle, socket: TcpStream) {
-        let connection = match acceptor.accept(Transport::from_tokio_io(socket)) {
+    async fn handle_connection(
+        &self,
+        ip: IpAddr,
+        acceptor: AcceptorHandle,
+        socket: WebSocket,
+        _permit: OwnedSemaphorePermit,
+    ) {
+        let connection = match acceptor.accept_axum(socket) {
             Ok(connection) => connection,
             Err(e) => {
                 tracing::error!("Error: Acceptor couldn't accept! {e}");

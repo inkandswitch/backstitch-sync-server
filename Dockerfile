@@ -24,7 +24,6 @@ ENV RUST_BACKTRACE=1
 
 VOLUME ["/data"]
 
-EXPOSE 8085/tcp
 EXPOSE 3000/tcp
 
 ENTRYPOINT ["/usr/local/bin/backstitch-entrypoint.sh"]

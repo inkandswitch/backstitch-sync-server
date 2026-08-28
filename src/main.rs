@@ -1,6 +1,9 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
-use axum::{routing::get, Router};
+use axum::{
+    routing::{any, get},
+    Router,
+};
 use clap::Parser;
 use tokio::sync::Semaphore;
 use tower_http::cors::CorsLayer;
@@ -20,11 +23,10 @@ async fn main() {
 
     let web_semaphore = Arc::new(Semaphore::new(100));
 
-    // ends on drop
-    let sync_server = sync::SyncServer::new(config.sync_port, &config.data_dir).await;
+    let sync_server = sync::SyncServer::new(&config.data_dir).await;
 
     let state = WebEndpointState {
-        repo: sync_server.repo(),
+        server: sync_server.clone(),
         semaphore: web_semaphore.clone(),
         config: Arc::new(config.clone()),
     };
@@ -36,22 +38,24 @@ async fn main() {
         // route to get the doc at a certain change hash
         .route("/doc_at/{id}/{change_hash}", get(web::doc_at))
         .route("/list_changes/{id}", get(web::list_changes))
+        // TODO: make this the webviewer
         .route("/", get(|| async { "fetch documents with /doc/{id}" }))
         .route("/describe", get(web::describe))
+        .route("/sync", any(web::sync))
         .with_state(state)
         .layer(CorsLayer::permissive());
-
-    let http_addr = format!("0.0.0.0:{}", config.http_port);
+    let http_addr = format!("0.0.0.0:{}", config.port);
     println!("starting HTTP server on {}", http_addr);
 
     let listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.unwrap();
-        })
-        .await
-        .unwrap();
-
-    tokio::signal::ctrl_c().await.unwrap();
-    drop(sync_server);
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        sync_server.shutdown().await;
+    })
+    .await
+    .unwrap();
 }

@@ -14,8 +14,6 @@ docker compose -f compose.example.yml up
 
 See [`compose.example.yml`](./compose.example.yml) for details on configuration.
 
-To connect a Backstitch client, enter the url `http://<ADDRESS>:<PORT>`. The port should be the port that maps to the HTTP port (`3000` in the Docker container), NOT the sync port (`8085`). If the mapped HTTP port is `80`, you don't need to specify the port.
-
 ## VPN Tunnel
 
 By default, the server runs at localhost:PORT, and anyone on your local network will be able to access it. If you want to expose it to other team members, we **highly recommend** using a VPN tunneling service like Tailscale or ZeroTier.
@@ -46,11 +44,7 @@ just
 ```
 
 
-Data will be stored to `./data` by default, but can be overridden.
-
-The server will run a TCP `samod` connection at `localhost:8085`, as well as an HTTP server for server-description and testing at `localhost:3000`.
-
-When you wish to connect with a Backstitch client, enter the `http_port` server URL. The default is `http://localhost:3000`.
+Data will be stored to `./data` by default, but can be overridden. The server's REST API will run at `http://localhost:3000`.
 
 
 ## IMPORTANT: Security!
