@@ -1,21 +1,86 @@
 @_default:
   just --list
 
-[arg('profile', pattern='debug|release')]
-[arg('auth', pattern='none')]
-run data_dir="./data" port="3000" profile="release" auth="none" webviewer="" :
+help:
     #!/usr/bin/env sh
-    mkdir -p {{data_dir}}
-
-    webviewer_arg=""
-    if [ -n "{{webviewer}}" ]; then
-        webviewer_arg="--webviewer \"{{webviewer}}\""
-    fi
+    set -euo pipefail
 
     RUST_BACKTRACE=full \
     RUST_LOG=automerge_repo=debug,info \
-    cargo run --{{profile}} -- \
-        --data-dir "{{data_dir}}" \
-        --port "{{port}}" \
-        --auth "{{auth}}" \
-        $webviewer_arg
+    cargo run --release -- --help
+
+run *args:
+    #!/usr/bin/env sh
+    set -euo pipefail
+
+    RUST_BACKTRACE=full \
+    RUST_LOG=automerge_repo=debug,info \
+    cargo run --release -- \
+        {{args}}
+
+[arg('profile', pattern='debug|release')]
+dev profile="release" *args:
+    #!/usr/bin/env sh
+    set -euo pipefail
+
+    mkdir -p "./data"
+
+    RUST_BACKTRACE=full \
+    RUST_LOG=automerge_repo=debug,info \
+    cargo run {{if profile == "release" { "--release" } else { "" }}} -- \
+        --data-dir "./data" \
+        --port 3000 \
+        {{args}}
+
+[arg('profile', pattern='debug|release')]
+dev-oidc profile="release" *args:
+    #!/usr/bin/env sh
+
+    mkdir -p "./data"
+
+    cleanup() {
+        docker compose -f tools/rauthy/docker-compose.yml down
+        exit 1
+    }
+
+    trap cleanup EXIT INT TERM
+
+    docker compose -f tools/rauthy/docker-compose.yml up -d
+
+    echo "Waiting for Rauthy..."
+    until curl -kfsS https://localhost:8443/auth/v1/health >/dev/null 2>&1; do
+        echo "Checking Rauthy's health..."
+        sleep 1
+    done
+
+    RUST_BACKTRACE=full \
+    RUST_LOG=automerge_repo=debug,info \
+    cargo run {{if profile == "release" { "--release" } else { "" }}} -- \
+        --data-dir "./data" \
+        --port 3001 \
+        --auth "oidc" \
+        --oidc-issuer "https://localhost:8443/auth/v1/" \
+        --accept-invalid-certs \
+        {{args}}
+
+        [arg('profile', pattern='debug|release')]
+
+[arg('profile', pattern='debug|release')]
+dev-endless profile="release" *args:
+    #!/usr/bin/env sh
+
+    mkdir -p "./data"
+
+
+    RUST_BACKTRACE=full \
+    RUST_LOG=automerge_repo=debug,info \
+    cargo run {{if profile == "release" { "--release" } else { "" }}} -- \
+        --data-dir "./data" \
+        --port 3001 \
+        --auth "oidc" \
+        --oidc-issuer "https://account.endlessstudios.com" \
+        --oidc-resource "https://api.endlessstudios.com" \
+        --webviewer "/" \
+        --webviewer-path "../backstitch-webviewer/dist" \
+        --no-webviewer-auth \
+        {{args}}

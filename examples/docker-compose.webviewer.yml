@@ -1,0 +1,42 @@
+# This is a configuration example providing the Backstitch Webviewer.
+services:
+  backstitch-webviewer:
+    image: ghcr.io/inkandswitch/backstitch-webviewer:latest
+    environment:
+      BACKSTITCH_API_URL: / # we're serving this at the root of our API
+    volumes:
+      - webviewer:/site
+ 
+  backstitch-sync-server:
+    image: ghcr.io/inkandswitch/backstitch-sync-server:latest
+    restart: unless-stopped
+    environment:
+      # The authentication scheme to use. This MUST be specified.
+      AUTH: "none"
+      # Recommend ourselves as the webviewer.
+      # If your webviewer is hosted elsewhere, this can take an absolute or relative URL.
+      WEBVIEWER: "/"
+      # The static site content path. In this case, we mounted it to /webviewer.
+      WEBVIEWER_PATH: "/webviewer"
+      # If you are using AUTH: "oidc", this must be specified as "true" to use the webviewer.
+      # This means that anyone will be able to access the webviewer, even if they don't have an account!
+      # If you're using AUTH: "none", the data is publically accessible anyways and this setting
+      # will have no effect.
+      NO_WEBVIEWER_AUTH: "false"
+
+    # Setting this to "80", as shown, will expose the HTTP server directly.
+    # If you have a domain name, we highly recommend using a HTTPS reverse-proxy
+    # service like Caddy instead.
+    # For an example with Caddy, see `docker-compose.caddy.yaml`. 
+    ports:
+      - "80:3000"
+
+    volumes:
+      # For data persistance, mount this backstitch-data volume.
+      - backstitch-data:/data
+      # Mount the built webviewer image volume to /webviewer
+      - webviewer:/webviewer
+
+volumes:
+  webviewer:
+  backstitch-data:

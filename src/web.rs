@@ -12,7 +12,6 @@ use samod::{DocHandle, DocumentId};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
-use url::Url;
 
 use crate::{
     config::{Authentication, CommandConfig},
@@ -127,8 +126,16 @@ fn hydrate_value_to_json(value: &automerge::hydrate::Value) -> serde_json::Value
 #[derive(Serialize)]
 pub struct ServerDescription {
     version: String,
-    webviewer: Option<Url>,
-    auth: Authentication,
+    minimum_backstitch_version: String,
+    sync: String,
+    webviewer: Option<String>,
+    auth: String,
+    // This has to be a string, because the Url crate likes to add a bad trailing slash.
+    oidc_issuer: Option<String>,
+    oidc_client_id: Option<String>,
+    oidc_redirect_port: Option<u16>,
+    // TODO: Remove this once Endless implements RFC 9728
+    oidc_resource: Option<String>,
 }
 
 pub async fn describe(
@@ -136,10 +143,32 @@ pub async fn describe(
 ) -> Result<Json<ServerDescription>, WebError> {
     let _permit = state.semaphore.acquire().await.unwrap();
     tracing::info!("Received request to describe");
+    let auth = state.config.authentication();
     Ok(Json(ServerDescription {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        auth: state.config.auth.clone(),
         webviewer: state.config.webviewer.clone(),
+        minimum_backstitch_version: "3.0.0".to_string(),
+        sync: "sync".to_string(),
+        auth: match &auth {
+            Authentication::None => "none".to_string(),
+            Authentication::Oidc(_) => "oidc".to_string(),
+        },
+        oidc_client_id: match &auth {
+            Authentication::None => None,
+            Authentication::Oidc(oidc_config) => Some(oidc_config.client_id.clone()),
+        },
+        oidc_redirect_port: match &auth {
+            Authentication::None => None,
+            Authentication::Oidc(oidc_config) => Some(oidc_config.redirect_port),
+        },
+        oidc_issuer: match &auth {
+            Authentication::None => None,
+            Authentication::Oidc(oidc_config) => Some(oidc_config.issuer.clone()),
+        },
+        oidc_resource: match &auth {
+            Authentication::None => None,
+            Authentication::Oidc(oidc_config) => oidc_config.resource.clone(),
+        },
     }))
 }
 
@@ -194,7 +223,7 @@ pub async fn last_heads(
     State(state): State<WebEndpointState>,
 ) -> Result<Json<Vec<ChangeHash>>, WebError> {
     let _permit = state.semaphore.acquire().await.unwrap();
-    println!("Received request for last heads of document ID: {}", id);
+    tracing::info!("Received request for last heads of document ID: {}", id);
     let doc_handle = get_handle(&id, &state).await?;
 
     Ok(Json(doc_handle.with_document(|d| d.get_heads())))

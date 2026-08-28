@@ -83,7 +83,7 @@ impl SyncServer {
         // from the HTTP server in the end.
         let acceptor = self
             .repo
-            .make_acceptor(Url::parse("0.0.0.0:8080").unwrap())
+            .make_acceptor(Url::parse("ws://0.0.0.0:8080").unwrap())
             .unwrap();
 
         tracing::info!("started automerge sync server...");

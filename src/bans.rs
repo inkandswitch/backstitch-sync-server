@@ -25,7 +25,7 @@ impl IpBans {
         let mut ip_failed_attempts = self.ip_failed_attempts.lock().await;
         let failed_attempts = ip_failed_attempts.get(ip).cloned().unwrap_or(0);
         if failed_attempts >= self.max_failed_attempts {
-            println!(
+            tracing::warn!(
                 "Client has been banned for {} minutes. IP: {ip}",
                 self.duration.as_secs() / 60
             );
