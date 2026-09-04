@@ -38,7 +38,7 @@ This is easy to do with Docker as well. For an example of how to add Caddy to yo
 ### OpenID Connect Authentication
 Backstitch allows optional authentication through OpenID Connect. OpenID Connect is a protocol based on OAuth 2.0 that many identity providers use, like Google or Okta, or many private organizations. Setting up OpenID Connect would allow you to log into Backstitch using your Google/Okta/etc credentials!
 
-For a Docker example, see [`examples/docker-compose.oidc.yml`](./examples/docker-compose.yml).
+For a Docker example, see [`examples/docker-compose.oidc.yml`](./examples/docker-compose.oidc.yml).
 
 However, setup can be fairly complicated, and is primarily intended for organizations. Most independent developers should **still be using ZeroTier or Tailscale** to expose their server to the internet.
 
