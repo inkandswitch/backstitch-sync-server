@@ -4,18 +4,33 @@ use std::{
     sync::Arc,
 };
 
-use axum::extract::ws::WebSocket;
-use samod::{
-    storage::TokioFilesystemStorage, AcceptorHandle, ConcurrencyConfig, ConnFinishedReason,
-    NeverAnnounce, Repo, Url,
+use future_form::{FutureForm, Sendable};
+use futures::FutureExt;
+use subduction_core::{
+    handshake::{self, audience::DiscoveryId, AuthenticateError},
+    subduction::error::AddConnectionError,
+    timestamp::TimestampSeconds,
+    transport::message::MessageTransport,
 };
+use subduction_crypto::nonce::Nonce;
+use subduction_websocket::{
+    handshake::{WebSocketHandshake, WebSocketHandshakeError},
+    sleep,
+    websocket::{KeepAlive, KeepAliveOutcome, ListenerTask, SenderTask, WebSocket},
+};
+use thiserror::Error;
 use tokio::{
     select,
     sync::{mpsc, OwnedSemaphorePermit, Semaphore},
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::bans::IpBans;
+use crate::{
+    bans::IpBans,
+    keys::SigningKey,
+    repo::{Repo, RepoError},
+    web::tungstenite_ws_extract,
+};
 
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
 const MAX_FAILED_ATTEMPTS: i64 = 50;
@@ -31,21 +46,21 @@ pub struct SyncServer {
     sockets_tx: tokio::sync::mpsc::Sender<SocketInfo>,
 }
 
-pub struct SocketInfo(pub SocketAddr, pub WebSocket);
+#[derive(Error, Debug)]
+enum ConnectionError {
+    #[error("authenticate failed: {0}")]
+    Authenticate(#[from] AuthenticateError<WebSocketHandshakeError>),
+    #[error("handshake timed out")]
+    Timeout(#[from] tokio::time::error::Elapsed),
+    #[error("connection disallowed: {0}")]
+    AddConnection(#[from] AddConnectionError<!>),
+}
+
+pub struct SocketInfo(pub SocketAddr, pub tungstenite_ws_extract::WebSocket);
 
 impl SyncServer {
-    pub async fn new(data_dir: &Path) -> Self {
-        // get home directory
-        let storage = TokioFilesystemStorage::new(data_dir);
-
-        let repo = Repo::build_tokio()
-            .with_concurrency(ConcurrencyConfig::Threadpool(
-                rayon::ThreadPoolBuilder::new().build().unwrap(),
-            ))
-            .with_storage(storage)
-            .with_announce_policy(NeverAnnounce)
-            .load()
-            .await;
+    pub async fn new(data_dir: &Path, signing_key: SigningKey) -> Result<Self, RepoError> {
+        let repo = Repo::new(data_dir, signing_key)?;
 
         let (sockets_tx, sockets_rx) = mpsc::channel(MAX_CONNECTIONS * 2);
 
@@ -61,7 +76,7 @@ impl SyncServer {
             let this = this.clone();
             tokio::spawn(async move { this.server_loop(sockets_rx).await });
         }
-        this
+        Ok(this)
     }
 
     pub fn repo(&self) -> Repo {
@@ -78,14 +93,7 @@ impl SyncServer {
     }
 
     async fn server_loop(&self, mut sockets_rx: mpsc::Receiver<SocketInfo>) {
-        // Start the automerge sync server
-        // This URL does nothing except participate in logs, since we're accepting websockets
-        // from the HTTP server in the end.
-        let acceptor = self
-            .repo
-            .make_acceptor(Url::parse("ws://0.0.0.0:8080").unwrap())
-            .unwrap();
-
+        // As we receive sockets from accept_socket(), this will process them.
         tracing::info!("started automerge sync server...");
 
         loop {
@@ -97,7 +105,9 @@ impl SyncServer {
                     };
 
                     let ip = addr.ip();
+                    // TODO (subd): Reimplement banning?
                     if self.bans.is_banned(&ip).await {
+                        tracing::error!("IP {ip} is banned.");
                         continue;
                     }
 
@@ -105,54 +115,103 @@ impl SyncServer {
                         break;
                     };
                     tracing::info!("Client connected. IP: {ip}");
-                    let acceptor = acceptor.clone();
-                    // Handle as automerge connection
+
                     let this = self.clone();
                     tokio::spawn(async move {
                         select! {
-                            _ = this.handle_connection(ip, acceptor, socket, permit) => {}
-                            _ = this.token.cancelled() => {}
+                            _ = this.token.cancelled() => {
+                            }
+                            res = this.handle_connection(ip, socket, permit) => {
+                                match res {
+                                    Ok(()) => {
+                                        // Graceful disconnect, so we get to unban!
+                                        this.bans.unban(&ip).await;
+                                    },
+                                    Err(e) => {
+                                        tracing::error!("Error with {ip}: {e}. Incrementing ban counter...");
+                                        this.bans.ban(&ip).await;
+                                    },
+                                }
+                            }
                         }
                     });
                 }
             }
         }
 
-        self.repo.stop().await;
+        self.repo.stop();
     }
 
     async fn handle_connection(
         &self,
         ip: IpAddr,
-        acceptor: AcceptorHandle,
-        socket: WebSocket,
+        socket: tungstenite_ws_extract::WebSocket,
         _permit: OwnedSemaphorePermit,
-    ) {
-        let connection = match acceptor.accept_axum(socket) {
-            Ok(connection) => connection,
-            Err(e) => {
-                tracing::error!("Error: Acceptor couldn't accept! {e}");
-                return;
-            }
-        };
+    ) -> Result<(), ConnectionError> {
+        // Do the handshake!
+        let now = TimestampSeconds::now();
+        let nonce = Nonce::random();
+        let subd = self.repo.subduction();
+        let handshake_fut = handshake::initiate::<Sendable, _, _, _, _>(
+            WebSocketHandshake::new(socket.socket),
+            |ws_handshake, peer_id| {
+                let (socket, sender_fut, keepalive_task) = WebSocket::new_with_keepalive(
+                    ws_handshake.into_inner(),
+                    peer_id,
+                    KeepAlive::balanced(),
+                    sleep::TokioSleeper,
+                );
+                (
+                    MessageTransport::new(socket),
+                    (Sendable::from_future(sender_fut), keepalive_task),
+                )
+            },
+            subd.signer(),
+            handshake::audience::Audience::Discover(DiscoveryId::new(
+                "backstitch_sync_server".as_bytes(),
+            )),
+            now,
+            nonce,
+        );
 
-        // put time-outers in time-out
-        match tokio::time::timeout(CONNECTION_TIMEOUT, connection.handshake_complete()).await {
-            // If there was a real error, ban 'em
-            Ok(Err(ConnFinishedReason::ErrorReceiving(message))) => {
-                tracing::error!("Client connection error: {message}. IP: {ip}");
-                self.bans.ban(&ip).await;
-            }
-            // If we're connected successfully, or if there was a graceful error reason, don't ban 'em
-            Ok(_) => {
-                tracing::info!("Client connection completed successfully. IP: {ip}");
-                self.bans.unban(&ip).await;
-            }
-            // If we timed out, ban 'em
-            Err(_) => {
-                tracing::warn!("Client connection timed out. IP: {ip}");
-                self.bans.ban(&ip).await;
+        let (authenticated, (sender_fut, keepalive_task)) =
+            tokio::time::timeout(CONNECTION_TIMEOUT, handshake_fut).await??;
+
+        let socket = authenticated.inner().clone();
+        let listener_fut = socket.inner().listen();
+        tracing::info!("Handshake completed for {ip}!");
+
+        let _fresh = self.repo.subduction().add_connection(authenticated).await?;
+
+        // TODO (subd): Are these cancellation-safe?
+        select! {
+            _ = self.token.cancelled() => {}
+            res = keepalive_task => match res {
+                KeepAliveOutcome::ConnectionClosed => {
+                    tracing::info!("Connection to {ip} closed.");
+                },
+                KeepAliveOutcome::Timeout { missed } => {
+                    tracing::warn!("Keepalive timed out for {ip}; missed: {missed}");
+                },
+                KeepAliveOutcome::StaleNoPong { unanswered } => {
+                    tracing::warn!("Keepalive stale for {ip}; unanswered: {unanswered}");
+                },
+            },
+            res = listener_fut => match res {
+                Ok(()) => tracing::info!("Connection to {ip} finished."),
+                Err(e) => {
+                    tracing::error!("Error sending: {e}");
+                }
+            },
+            res = sender_fut => match res {
+                Ok(()) => tracing::info!("Connection to {ip} finished."),
+                Err(e) => {
+                    // I don't think we want to increment the ban counter here
+                    // Since they successfully handshaked we know they're legit
+                    tracing::error!("Error sending: {e}");
+                },
             }
         }
+        Ok(())
     }
 }

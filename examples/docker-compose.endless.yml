@@ -32,9 +32,14 @@ services:
       # Skip authentication for the webviewer HTTP ports.
       # This is dangerous: If your server is accessible to the open internet, anyone could read your projects.
       NO_WEBVIEWER_AUTH: "true"
+      # Highly recommended: Include a signing key.
+      SIGNING_KEY: backstitch_signing_key
 
     expose:
       - "3000"
+      
+    secrets:
+      - backstitch_signing_key
 
     volumes:
       # For data persistance, mount this backstitch-data volume.
@@ -59,6 +64,10 @@ services:
       - caddy-config:/config
     depends_on:
       - backstitch-sync-server
+
+secrets:
+  # This file should contain a randomly-generated, 32-byte hex string to use as the signing key.
+  backstitch_signing_key: ./your/secret/path/backstitch_signing_key.txt
 
 volumes:
   webviewer:

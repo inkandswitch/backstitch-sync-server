@@ -29,8 +29,15 @@ enum AuthenticationMode {
 pub struct CommandConfig {
     #[arg(
         long,
+        help = "The path of the secret signing key to use. \
+        The file must be a TODO(subd): specify
+        "
+    )]
+    pub signing_key: Option<PathBuf>,
+    #[arg(
+        long,
         help = "The internal localhost port to use for the HTTP server.",
-        default_value = "3000"
+        default_value_t = 3000u16
     )]
     pub port: u16,
     #[arg(long, help = "The webviewer URL to recommend, if any.")]
@@ -71,7 +78,7 @@ pub struct CommandConfig {
     #[arg(
         long,
         help = "The localhost redirect port specified while registering the Backstitch client.",
-        default_value = "58656"
+        default_value_t = 58656u16
     )]
     oidc_redirect_port: u16,
     // TODO: Remove this once Endless implements RFC 9728

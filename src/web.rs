@@ -2,21 +2,25 @@ use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 
 use automerge::{ChangeHash, ReadDoc};
 use axum::{
-    extract::{ws::WebSocket, ConnectInfo, Path, State, WebSocketUpgrade},
+    extract::{ConnectInfo, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use chrono::{TimeZone, Utc};
-use samod::{DocHandle, DocumentId};
+use sedimentree_core::{hex, id::SedimentreeId};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 
 use crate::{
     config::{Authentication, CommandConfig},
+    repo::RepoError,
     sync::{SocketInfo, SyncServer},
+    web::tungstenite_ws_extract::{WebSocket, WebSocketUpgrade},
 };
+
+pub mod tungstenite_ws_extract;
 
 #[derive(Clone)]
 pub struct WebEndpointState {
@@ -33,11 +37,16 @@ pub enum WebError {
     NotFound(String),
 
     #[error("the document ID was malformed: {0}")]
-    BadDocumentId(#[from] samod::BadDocumentId),
-    #[error("the repo was stopped")]
-    Stopped(#[from] samod::Stopped),
+    BadDocumentId(String),
     #[error("an error occurred during serialization: {0}")]
     Serde(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Repo(#[from] RepoError),
+
+    // TODO (subd): REMOVE
+    #[error("the endpoint is not implemented")]
+    NotImplemented,
 }
 
 #[derive(Serialize)]
@@ -50,12 +59,16 @@ impl IntoResponse for WebError {
         // this is really awkward, but push it to the console
         tracing::error!("Error into response: {self}");
 
-        let status = match self {
+        let status = match &self {
             WebError::BadRequest(_) => StatusCode::BAD_REQUEST,
             WebError::NotFound(_) => StatusCode::NOT_FOUND,
             WebError::BadDocumentId(_) => StatusCode::BAD_REQUEST,
-            WebError::Stopped(_) => StatusCode::INTERNAL_SERVER_ERROR,
             WebError::Serde(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            WebError::NotImplemented => StatusCode::NOT_FOUND,
+            WebError::Repo(repo_error) => match repo_error {
+                RepoError::NoSuchDocument(_) => StatusCode::NOT_FOUND,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            },
         };
 
         let message = self.to_string();
@@ -69,15 +82,6 @@ pub struct Change {
     author: String,
     date: String,
     message: serde_json::Value,
-}
-
-async fn get_handle(id: &str, state: &WebEndpointState) -> Result<DocHandle, WebError> {
-    state
-        .server
-        .repo()
-        .find(DocumentId::from_str(id)?)
-        .await?
-        .ok_or(WebError::NotFound("document ID doesn't exist".to_string()))
 }
 
 fn parse_change_hashes(input: &str) -> Result<Vec<ChangeHash>, WebError> {
@@ -173,6 +177,7 @@ pub async fn describe(
 }
 
 pub async fn sync(
+    // Use a custom extractor for this, instead of tokio::ws default.
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<WebEndpointState>,
@@ -189,79 +194,83 @@ pub async fn doc(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<serde_json::Value>, WebError> {
-    let _permit = state.semaphore.acquire().await.unwrap();
-    tracing::info!("Received request for document ID: {}", id);
-    let doc_handle = get_handle(&id, &state).await?;
-    let checked_out_doc_json =
-        doc_handle.with_document(|d| serde_json::to_value(automerge::AutoSerde::from(&*d)))?;
+    Err(WebError::NotImplemented)
+    // let _permit = state.semaphore.acquire().await.unwrap();
+    // tracing::info!("Received request for document ID: {}", id);
+    // let doc_handle = get_handle(&id, &state).await?;
+    // let checked_out_doc_json =
+    //     doc_handle.with_document(|d| serde_json::to_value(automerge::AutoSerde::from(&*d)))?;
 
-    Ok(Json(checked_out_doc_json))
+    // Ok(Json(checked_out_doc_json))
 }
 
 pub async fn doc_at(
     Path((id, change_hash)): Path<(String, String)>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<serde_json::Value>, WebError> {
-    let _permit = state.semaphore.acquire().await.unwrap();
-    tracing::info!("Received request for document ID: {id} at change hash: {change_hash}");
-    let doc_handle = get_handle(&id, &state).await?;
+    Err(WebError::NotImplemented)
+    // let _permit = state.semaphore.acquire().await.unwrap();
+    // tracing::info!("Received request for document ID: {id} at change hash: {change_hash}");
+    // let id = SedimentreeId::from_str(&id)?;
 
-    let change_hashes = parse_change_hashes(&change_hash)?;
-    let doc_at_heads = doc_handle.with_document(move |d| {
-        ReadDoc::hydrate(&*d, automerge::ROOT, Some(&change_hashes)).map_err(|e| {
-            WebError::BadRequest(format!(
-                "Error getting document at change hashes {change_hashes:?} ({e})"
-            ))
-        })
-    })?;
+    // let change_hashes = parse_change_hashes(&change_hash)?;
+    // let d = state.server.repo().get_document(id).await?;
+    // let doc_at_heads =
+    //     ReadDoc::hydrate(&d, automerge::ROOT, Some(&change_hashes)).map_err(|e| {
+    //         WebError::BadRequest(format!(
+    //             "Error getting document at change hashes {change_hashes:?} ({e})"
+    //         ))
+    //     })?;
 
-    Ok(Json(hydrate_value_to_json(&doc_at_heads)))
+    // Ok(Json(hydrate_value_to_json(&doc_at_heads)))
 }
 
 pub async fn last_heads(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<Vec<ChangeHash>>, WebError> {
-    let _permit = state.semaphore.acquire().await.unwrap();
-    tracing::info!("Received request for last heads of document ID: {}", id);
-    let doc_handle = get_handle(&id, &state).await?;
+    Err(WebError::NotImplemented)
+    // let _permit = state.semaphore.acquire().await.unwrap();
+    // tracing::info!("Received request for last heads of document ID: {}", id);
+    // let doc_handle = get_handle(&id, &state).await?;
 
-    Ok(Json(doc_handle.with_document(|d| d.get_heads())))
+    // Ok(Json(doc_handle.with_document(|d| d.get_heads())))
 }
 
 pub async fn list_changes(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<HashMap<String, Change>>, WebError> {
-    let _permit = state.semaphore.acquire().await.unwrap();
-    tracing::info!("Received request for changes list of document ID: {id}");
-    let doc_handle = get_handle(&id, &state).await?;
+    Err(WebError::NotImplemented)
+    // let _permit = state.semaphore.acquire().await.unwrap();
+    // tracing::info!("Received request for changes list of document ID: {id}");
+    // let doc_handle = get_handle(&id, &state).await?;
 
-    Ok(Json(doc_handle.with_document(|d| {
-        let changes = d.get_changes(&[]);
-        let mut out = HashMap::new();
+    // Ok(Json(doc_handle.with_document(|d| {
+    //     let changes = d.get_changes(&[]);
+    //     let mut out = HashMap::new();
 
-        for change in changes {
-            let hash = change.hash().to_string();
-            let date = match Utc.timestamp_opt(change.timestamp(), 0).single() {
-                Some(dt) => dt.to_rfc3339(),
-                None => change.timestamp().to_string(),
-            };
-            let message = match change.message() {
-                Some(raw_message) => serde_json::from_str::<serde_json::Value>(raw_message)
-                    .unwrap_or_else(|_| serde_json::Value::String(raw_message.clone())),
-                None => serde_json::Value::Null,
-            };
+    //     for change in changes {
+    //         let hash = change.hash().to_string();
+    //         let date = match Utc.timestamp_opt(change.timestamp(), 0).single() {
+    //             Some(dt) => dt.to_rfc3339(),
+    //             None => change.timestamp().to_string(),
+    //         };
+    //         let message = match change.message() {
+    //             Some(raw_message) => serde_json::from_str::<serde_json::Value>(raw_message)
+    //                 .unwrap_or_else(|_| serde_json::Value::String(raw_message.clone())),
+    //             None => serde_json::Value::Null,
+    //         };
 
-            out.insert(
-                hash,
-                Change {
-                    author: change.actor_id().to_string(),
-                    date,
-                    message,
-                },
-            );
-        }
-        out
-    })))
+    //         out.insert(
+    //             hash,
+    //             Change {
+    //                 author: change.actor_id().to_string(),
+    //                 date,
+    //                 message,
+    //             },
+    //         );
+    //     }
+    //     out
+    // })))
 }

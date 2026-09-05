@@ -11,6 +11,8 @@ services:
       # VPN tunnel service like Tailscale or ZeroTier.
       # Those will provide secure, easy authentication setup.
       AUTH: "none"
+      # Highly recommended: Include a signing key.
+      SIGNING_KEY: backstitch_signing_key
 
     # Setting this to "80", as shown, will expose the HTTP server directly at
     # http://localhost. If you set it to something other than 80, like 8085,
@@ -21,9 +23,17 @@ services:
     ports:
       - "80:3000"
 
+    secrets:
+      - backstitch_signing_key
+
     volumes:
       # For data persistance, mount this backstitch-data volume.
-      - backstitch-data:/data
+      - backstitch-data:/data    
+
+secrets:
+  # This file should contain a randomly-generated, 32-byte hex string to use as the signing key.
+  backstitch_signing_key: ./your/secret/path/backstitch_signing_key.txt
+
 
 volumes:
   backstitch-data:

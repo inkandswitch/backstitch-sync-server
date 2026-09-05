@@ -19,6 +19,8 @@ services:
       # Some OIDC providers require the `resource` parameter to be set to a specific URL to grant access.
       # This parameter tells Backstitch to use that URL.
       OIDC_RESOURCE: "https://api.example.com"
+      # Highly recommended: Include a signing key.
+      SIGNING_KEY: backstitch_signing_key
 
     # Setting this to "80", as shown, will expose the HTTP server directly.
     # If you have a domain name, we highly recommend using a HTTPS reverse-proxy
@@ -27,9 +29,16 @@ services:
     ports:
       - "80:3000"
 
+    secrets:
+      - backstitch_signing_key
+
     volumes:
       # For data persistance, mount this backstitch-data volume.
       - backstitch-data:/data
+      
+secrets:
+  # This file should contain a randomly-generated, 32-byte hex string to use as the signing key.
+  backstitch_signing_key: ./your/secret/path/backstitch_signing_key.txt
 
 volumes:
   backstitch-data:

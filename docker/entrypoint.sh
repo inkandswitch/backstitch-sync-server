@@ -16,6 +16,9 @@ if [ -n "${WEBVIEWER_PATH:-}" ]; then
     set -- "$@" --webviewer-path "$WEBVIEWER_PATH"
 fi
 
+if [ -n "${SIGNING_KEY:-}" ]; then
+    set -- "$@" --signing-key "$SIGNING_KEY"
+fi
 
 if [ -n "${OIDC_ISSUER:-}" ]; then
     set -- "$@" --oidc-issuer "$OIDC_ISSUER"

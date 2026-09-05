@@ -23,6 +23,8 @@ services:
       # If you're using AUTH: "none", the data is publically accessible anyways and this setting
       # will have no effect.
       NO_WEBVIEWER_AUTH: "false"
+      # Highly recommended: Include a signing key.
+      SIGNING_KEY: backstitch_signing_key
 
     # Setting this to "80", as shown, will expose the HTTP server directly.
     # If you have a domain name, we highly recommend using a HTTPS reverse-proxy
@@ -30,12 +32,19 @@ services:
     # For an example with Caddy, see `docker-compose.caddy.yaml`. 
     ports:
       - "80:3000"
+      
+    secrets:
+      - backstitch_signing_key
 
     volumes:
       # For data persistance, mount this backstitch-data volume.
       - backstitch-data:/data
       # Mount the built webviewer image volume to /webviewer
       - webviewer:/webviewer
+
+secrets:
+  # This file should contain a randomly-generated, 32-byte hex string to use as the signing key.
+  backstitch_signing_key: ./your/secret/path/backstitch_signing_key.txt
 
 volumes:
   webviewer:

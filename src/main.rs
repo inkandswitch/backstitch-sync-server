@@ -8,6 +8,7 @@ use axum::{
 use clap::Parser;
 use jwt_authorizer::{Authorizer, IntoLayer, JwtAuthorizer, Validation};
 use reqwest::{header, Client};
+use secrecy::ExposeSecret;
 use tokio::sync::Semaphore;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, services::ServeDir, set_header::SetResponseHeaderLayer};
@@ -19,6 +20,8 @@ use crate::{
 
 mod bans;
 mod config;
+mod keys;
+mod repo;
 mod sync;
 mod tracing;
 mod web;
@@ -38,7 +41,37 @@ async fn main() {
 
     let web_semaphore = Arc::new(Semaphore::new(100));
 
-    let sync_server = sync::SyncServer::new(&config.data_dir).await;
+    let signing_key = match &config.signing_key {
+        Some(keyfile) => match keys::extract_signing_key(keyfile).await {
+            Ok(key) => key,
+            Err(e) => {
+                ::tracing::error!(
+                    "Error extracting signing key from file {:?}: {e}",
+                    config.signing_key
+                );
+                return;
+            }
+        },
+        None => {
+            let key = keys::generate_signing_key();
+            ::tracing::error!("!!! SIGNING KEY NOT PROVIDED !!!");
+            ::tracing::error!(
+                "The Sync Server will use a randomly-generated signing key for this session ONLY."
+            );
+            ::tracing::error!("It will not be saved. To persist the key, please write the following string to a keyfile:");
+            // This is... probably fine?
+            ::tracing::error!("{}", hex::encode(key.expose_secret()));
+            key
+        }
+    };
+
+    let sync_server = match sync::SyncServer::new(&config.data_dir, signing_key).await {
+        Ok(s) => s,
+        Err(e) => {
+            ::tracing::error!("Could not start sync server {e}");
+            return;
+        }
+    };
 
     let state = WebEndpointState {
         server: sync_server.clone(),
