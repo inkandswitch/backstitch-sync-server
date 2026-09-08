@@ -194,14 +194,15 @@ pub async fn doc(
     Path(id): Path<String>,
     State(state): State<WebEndpointState>,
 ) -> Result<Json<serde_json::Value>, WebError> {
-    Err(WebError::NotImplemented)
-    // let _permit = state.semaphore.acquire().await.unwrap();
-    // tracing::info!("Received request for document ID: {}", id);
-    // let doc_handle = get_handle(&id, &state).await?;
-    // let checked_out_doc_json =
-    //     doc_handle.with_document(|d| serde_json::to_value(automerge::AutoSerde::from(&*d)))?;
-
-    // Ok(Json(checked_out_doc_json))
+    let _permit = state.semaphore.acquire().await.unwrap();
+    tracing::info!("Received request for document ID: {}", id);
+    let doc = state
+        .server
+        .repo()
+        .get_document(SedimentreeId::from_str(&id).map_err(|_| WebError::BadDocumentId(id))?)
+        .await?;
+    let json = serde_json::to_value(automerge::AutoSerde::from(&doc))?;
+    Ok(Json(json))
 }
 
 pub async fn doc_at(
