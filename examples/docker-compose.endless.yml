@@ -44,7 +44,7 @@ services:
   # You'll need a Caddyfile in ./conf/Caddyfile, relative to this docker-compose.yml file.
   # The Caddyfile should look something like this:
   # backstitch.example.com {
-  #  reverse_proxy backstitch-sync-server:3122
+  #  reverse_proxy backstitch-sync-server:3000
   #}
 
   caddy:
