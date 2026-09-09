@@ -10,17 +10,16 @@ use axum::{
 use chrono::{TimeZone, Utc};
 use sedimentree_core::{hex, id::SedimentreeId};
 use serde::Serialize;
+use subduction_hyper::axum::TungsteniteUpgrade;
 use thiserror::Error;
 use tokio::sync::Semaphore;
+use tungstenite::protocol::WebSocketConfig;
 
 use crate::{
     config::{Authentication, CommandConfig},
     repo::RepoError,
     sync::{SocketInfo, SyncServer},
-    web::tungstenite_ws_extract::{WebSocket, WebSocketUpgrade},
 };
-
-pub mod tungstenite_ws_extract;
 
 #[derive(Clone)]
 pub struct WebEndpointState {
@@ -178,16 +177,17 @@ pub async fn describe(
 
 pub async fn sync(
     // Use a custom extractor for this, instead of tokio::ws default.
-    ws: WebSocketUpgrade,
+    ws: TungsteniteUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<WebEndpointState>,
 ) -> Response {
     tracing::info!("Received request to sync");
-    ws.on_failed_upgrade(move |e| tracing::error!("Failed websocket upgrade for {addr}: {e}"))
-        .on_upgrade(async move |socket: WebSocket| {
-            tracing::info!("Upgrade successful for {}", addr.ip());
+    ws.on_upgrade(
+        async_tungstenite::tungstenite::protocol::WebSocketConfig::default(),
+        async move |socket| {
             state.server.accept_socket(SocketInfo(addr, socket)).await;
-        })
+        },
+    )
 }
 
 pub async fn doc(

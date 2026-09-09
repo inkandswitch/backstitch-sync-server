@@ -4,8 +4,11 @@ use std::{
     sync::Arc,
 };
 
+use async_tungstenite::{tokio::TokioAdapter, WebSocketStream};
 use future_form::{FutureForm, Sendable};
 use futures::FutureExt;
+use hyper::upgrade::Upgraded;
+use hyper_util::rt::TokioIo;
 use subduction_core::{
     handshake::{self, audience::DiscoveryId, AuthenticateError},
     subduction::error::AddConnectionError,
@@ -29,7 +32,6 @@ use crate::{
     bans::IpBans,
     keys::SigningKey,
     repo::{Repo, RepoError},
-    web::tungstenite_ws_extract,
 };
 
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
@@ -56,7 +58,9 @@ enum ConnectionError {
     AddConnection(#[from] AddConnectionError<!>),
 }
 
-pub struct SocketInfo(pub SocketAddr, pub tungstenite_ws_extract::WebSocket);
+type Wss = WebSocketStream<TokioAdapter<TokioIo<Upgraded>>>;
+
+pub struct SocketInfo(pub SocketAddr, pub Wss);
 
 impl SyncServer {
     pub async fn new(data_dir: &Path, signing_key: SigningKey) -> Result<Self, RepoError> {
@@ -145,7 +149,7 @@ impl SyncServer {
     async fn handle_connection(
         &self,
         ip: IpAddr,
-        socket: tungstenite_ws_extract::WebSocket,
+        socket: Wss,
         _permit: OwnedSemaphorePermit,
     ) -> Result<(), ConnectionError> {
         // Do the handshake!
@@ -153,7 +157,7 @@ impl SyncServer {
         let nonce = Nonce::random();
         let subd = self.repo.subduction();
         let handshake_fut = handshake::initiate::<Sendable, _, _, _, _>(
-            WebSocketHandshake::new(socket.socket),
+            WebSocketHandshake::new(socket),
             |ws_handshake, peer_id| {
                 let (socket, sender_fut, keepalive_task) = WebSocket::new_with_keepalive(
                     ws_handshake.into_inner(),
