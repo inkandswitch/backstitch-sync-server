@@ -178,7 +178,10 @@ pub async fn sync(
     State(state): State<WebEndpointState>,
 ) -> Response {
     tracing::info!("Received request to sync");
+    // is this wise? Probably rethink this in Subduction. Consider unlimited message size?
+    // Also, we desperately need a test for this... it keeps breaking. Super easy to forget.
     ws.max_frame_size(8 * 1024 * 1024 * 1024) // 8gb
+        .max_message_size(16 * 1024 * 1024 * 1024) // 16gb
         .on_failed_upgrade(move |e| tracing::error!("Failed websocket upgrade for {addr}: {e}"))
         .on_upgrade(async move |socket: WebSocket| {
             tracing::info!("Upgrade successful for {}", addr.ip());
