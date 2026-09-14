@@ -178,7 +178,8 @@ pub async fn sync(
     State(state): State<WebEndpointState>,
 ) -> Response {
     tracing::info!("Received request to sync");
-    ws.on_failed_upgrade(move |e| tracing::error!("Failed websocket upgrade for {addr}: {e}"))
+    ws.max_frame_size(8 * 1024 * 1024 * 1024) // 8gb
+        .on_failed_upgrade(move |e| tracing::error!("Failed websocket upgrade for {addr}: {e}"))
         .on_upgrade(async move |socket: WebSocket| {
             tracing::info!("Upgrade successful for {}", addr.ip());
             state.server.accept_socket(SocketInfo(addr, socket)).await;
