@@ -42,14 +42,14 @@ secrecy = "0.10.3"
 hex = "0.4.3"
 
 # automergy stuff
-subduction_core = "0.18.1"
-sedimentree_core = { version = "0.14.1", features = ["serde"] }
-subduction_redb_storage = "0.2.1"
-subduction_websocket = { version = "0.12.1", features = [
+subduction_core = { git = "https://github.com/inkandswitch/subduction", branch = "axum_ws" }
+sedimentree_core = { git = "https://github.com/inkandswitch/subduction", branch = "axum_ws", features = ["serde"] }
+subduction_redb_storage = { git = "https://github.com/inkandswitch/subduction", branch = "axum_ws" }
+subduction_websocket = { git = "https://github.com/inkandswitch/subduction", branch = "axum_ws", features = [
     "tokio_base",
     "tokio_client",
 ] }
-subduction_crypto = "0.9.1"
+subduction_crypto = { git = "https://github.com/inkandswitch/subduction", branch = "axum_ws" }
 subduction_hyper = { git = "https://github.com/inkandswitch/subduction", branch = "axum_ws", features = [
     "axum",
 ] }

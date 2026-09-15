@@ -11,6 +11,7 @@ use chrono::{TimeZone, Utc};
 use sedimentree_core::{hex, id::SedimentreeId};
 use serde::Serialize;
 use subduction_hyper::axum::TungsteniteUpgrade;
+use subduction_websocket::tokio::TokioSpawn;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 use tungstenite::protocol::WebSocketConfig;
@@ -183,7 +184,10 @@ pub async fn sync(
 ) -> Response {
     tracing::info!("Received request to sync");
     ws.on_upgrade(
-        async_tungstenite::tungstenite::protocol::WebSocketConfig::default(),
+        &TokioSpawn,
+        async_tungstenite::tungstenite::protocol::WebSocketConfig::default()
+            .max_frame_size(Some(8 * 1024 * 1024 * 1024))
+            .max_message_size(Some(16 * 1024 * 1024 * 1024)),
         async move |socket| {
             state.server.accept_socket(SocketInfo(addr, socket)).await;
         },
