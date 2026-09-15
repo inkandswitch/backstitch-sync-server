@@ -28,6 +28,8 @@ async fn main() {
     let config = CommandConfig::parse();
     tracing::initialize_tracing();
 
+    ::tracing::info!("{config:?}");
+
     if !config.no_webviewer_auth
         && config.webviewer_path.is_some()
         && matches!(config.authentication(), Authentication::Oidc(_))
