@@ -6,7 +6,7 @@ Join our [Discord](https://discord.gg/SkW9vem5Ez) for support & community!
 
 ## Docker: Basic Configuration
 
-A simple Docker Compose configuration is available in [`examples/docker-compose.simple.yml`](./examples/docker-compose.yml). It runs the image from the ghcr.io `backstitch-sync-server` package.
+A simple Docker Compose configuration is available in [`examples/docker-compose.simple.yml`](./examples/docker-compose.simple.yml). It runs the image from the ghcr.io `backstitch-sync-server` package.
 
 ```sh
 docker compose -f docker-compose.simple.yml up
