@@ -253,7 +253,7 @@ pub async fn list_changes(
             };
             let message = match change.message() {
                 Some(raw_message) => serde_json::from_str::<serde_json::Value>(raw_message)
-                    .unwrap_or_else(|_| serde_json::Value::String(raw_message.clone())),
+                    .unwrap_or_else(|_| serde_json::Value::String(raw_message.to_string())),
                 None => serde_json::Value::Null,
             };
 

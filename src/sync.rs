@@ -128,7 +128,7 @@ impl SyncServer {
         socket: WebSocket,
         _permit: OwnedSemaphorePermit,
     ) {
-        let connection = match acceptor.accept_axum(socket) {
+        let connection = match acceptor.accept_axum(socket, None) {
             Ok(connection) => connection,
             Err(e) => {
                 tracing::error!("Error: Acceptor couldn't accept! {e}");
