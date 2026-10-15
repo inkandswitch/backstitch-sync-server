@@ -7,7 +7,7 @@ set -- \
     --auth "${AUTH:-none}" \
     --oidc-redirect-port "${OIDC_REDIRECT_PORT:-58656}" \
     --oidc-client-id "${OIDC_CLIENT_ID:-backstitch}" \
-    --connection-timeout "${CONNECTION_TIMEOUT:-10000}
+    --connection-timeout "${CONNECTION_TIMEOUT:-10000}"
 
 if [ -n "${WEBVIEWER:-}" ]; then
     set -- "$@" --webviewer "$WEBVIEWER"
