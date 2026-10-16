@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     http::HeaderValue,
@@ -38,7 +38,11 @@ async fn main() {
 
     let web_semaphore = Arc::new(Semaphore::new(100));
 
-    let sync_server = sync::SyncServer::new(&config.data_dir).await;
+    let sync_server = sync::SyncServer::new(
+        &config.data_dir,
+        Duration::from_millis(config.connection_timeout),
+    )
+    .await;
 
     let state = WebEndpointState {
         server: sync_server.clone(),

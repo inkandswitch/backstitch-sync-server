@@ -1,9 +1,14 @@
-use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+};
 
 use automerge::{ChangeHash, ReadDoc};
 use axum::{
     extract::{ws::WebSocket, ConnectInfo, Path, State, WebSocketUpgrade},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -175,6 +180,7 @@ pub async fn describe(
 pub async fn sync(
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebEndpointState>,
 ) -> Response {
     tracing::info!("Received request to sync");
@@ -184,9 +190,28 @@ pub async fn sync(
         .max_message_size(16 * 1024 * 1024 * 1024) // 16gb
         .on_failed_upgrade(move |e| tracing::error!("Failed websocket upgrade for {addr}: {e}"))
         .on_upgrade(async move |socket: WebSocket| {
-            tracing::info!("Upgrade successful for {}", addr.ip());
-            state.server.accept_socket(SocketInfo(addr, socket)).await;
+            // TODO: this may be insecure -- we're blindly trusting an X-Forwarded-For header, which might be spoofed.
+            // Probably figure out a way to trust a proxy, and select only the leftmost *un*-trusted address.
+            // But this works for now. Worst case, someone doesn't get banned; but the purpose of banning isn't security,
+            // it's preventing crawler bots from hitting the endpoint and timing out on connections.
+            let ip = if state.config.trust_proxy {
+                client_ip(&headers, addr)
+            } else {
+                addr.ip()
+            };
+            tracing::info!("Upgrade successful for {}", ip);
+            state.server.accept_socket(SocketInfo(ip, socket)).await;
         })
+}
+
+fn client_ip(headers: &HeaderMap, peer_addr: SocketAddr) -> IpAddr {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .inspect(|f| tracing::info!("IP {peer_addr} forwarded from {f}"))
+        .and_then(|value| value.split(',').next())
+        .and_then(|value| value.trim().parse::<IpAddr>().ok())
+        .unwrap_or_else(|| peer_addr.ip())
 }
 
 pub async fn doc(

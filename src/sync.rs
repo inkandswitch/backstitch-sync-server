@@ -1,8 +1,4 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    path::Path,
-    sync::Arc,
-};
+use std::{net::IpAddr, path::Path, sync::Arc, time::Duration};
 
 use axum::extract::ws::WebSocket;
 use samod::{
@@ -19,7 +15,6 @@ use crate::bans::IpBans;
 
 const BAN_DURATION: std::time::Duration = std::time::Duration::from_secs(600);
 const MAX_FAILED_ATTEMPTS: i64 = 50;
-const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const MAX_CONNECTIONS: usize = 500;
 
 #[derive(Clone)]
@@ -29,12 +24,13 @@ pub struct SyncServer {
     token: CancellationToken,
     semaphore: Arc<Semaphore>,
     sockets_tx: tokio::sync::mpsc::Sender<SocketInfo>,
+    connection_timeout: Duration,
 }
 
-pub struct SocketInfo(pub SocketAddr, pub WebSocket);
+pub struct SocketInfo(pub IpAddr, pub WebSocket);
 
 impl SyncServer {
-    pub async fn new(data_dir: &Path) -> Self {
+    pub async fn new(data_dir: &Path, connection_timeout: Duration) -> Self {
         // get home directory
         let storage = TokioFilesystemStorage::new(data_dir);
 
@@ -55,6 +51,7 @@ impl SyncServer {
             token: CancellationToken::new(),
             semaphore: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             sockets_tx,
+            connection_timeout,
         };
 
         {
@@ -92,11 +89,10 @@ impl SyncServer {
             select! {
                 _ = self.token.cancelled() => break,
                 info = sockets_rx.recv() => {
-                    let Some(SocketInfo(addr, socket)) = info else {
+                    let Some(SocketInfo(ip, socket)) = info else {
                         break;
                     };
 
-                    let ip = addr.ip();
                     if self.bans.is_banned(&ip).await {
                         continue;
                     }
@@ -137,7 +133,7 @@ impl SyncServer {
         };
 
         // put time-outers in time-out
-        match tokio::time::timeout(CONNECTION_TIMEOUT, connection.handshake_complete()).await {
+        match tokio::time::timeout(self.connection_timeout, connection.handshake_complete()).await {
             // If there was a real error, ban 'em
             Ok(Err(ConnFinishedReason::ErrorReceiving(message))) => {
                 tracing::error!("Client connection error: {message}. IP: {ip}");
