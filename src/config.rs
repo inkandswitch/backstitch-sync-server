@@ -39,6 +39,12 @@ pub struct CommandConfig {
         default_value = "10000"
     )]
     pub connection_timeout: u64,
+    #[arg(
+        long,
+        help = "Whether to trust X-Forwarded-For headers to track the original IP of requests. Useful if your server is behind a proxy.",
+        default_value_t = false
+    )]
+    pub trust_proxy: bool,
     #[arg(long, help = "The webviewer URL to recommend, if any.")]
     pub webviewer: Option<String>,
     #[arg(

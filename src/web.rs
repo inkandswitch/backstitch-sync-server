@@ -194,7 +194,11 @@ pub async fn sync(
             // Probably figure out a way to trust a proxy, and select only the leftmost *un*-trusted address.
             // But this works for now. Worst case, someone doesn't get banned; but the purpose of banning isn't security,
             // it's preventing crawler bots from hitting the endpoint and timing out on connections.
-            let ip = client_ip(&headers, addr);
+            let ip = if state.config.trust_proxy {
+                client_ip(&headers, addr)
+            } else {
+                addr.ip()
+            };
             tracing::info!("Upgrade successful for {}", ip);
             state.server.accept_socket(SocketInfo(ip, socket)).await;
         })
